@@ -1,0 +1,28 @@
+.app-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  gap: 8px;
+}
+
+.app-logo {
+  margin-right: 4px;
+}
+
+.app-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.nav-active {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+.app-content {
+  min-height: calc(100vh - 64px);
+}

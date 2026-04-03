@@ -1,0 +1,19 @@
+<mat-toolbar color="primary" class="app-toolbar">
+  <mat-icon class="app-logo">sports_esports</mat-icon>
+  <span class="app-title">Gamesync</span>
+
+  <span class="spacer"></span>
+
+  <a mat-button routerLink="/library" routerLinkActive="nav-active">
+    <mat-icon>library_books</mat-icon>
+    Library
+  </a>
+  <a mat-button routerLink="/connections" routerLinkActive="nav-active">
+    <mat-icon>link</mat-icon>
+    Connections
+  </a>
+</mat-toolbar>
+
+<main class="app-content">
+  <router-outlet />
+</main>
