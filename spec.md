@@ -99,3 +99,14 @@ This file contains user stories for the Gamesync project. Every change must be r
 - [ ] Connections list page shows all configured connections
 - [ ] User can delete a connection
 - [ ] Deleting a connection removes its games from the library
+
+---
+
+### US-009: Successful build required
+**As a** developer,
+**I want** every change to produce a passing production build,
+**So that** the application is always in a deployable state.
+
+**Acceptance criteria:**
+- [ ] The project has a production build configuration (`ng build`)
+- [ ] The build completes without errors before a change is considered done
