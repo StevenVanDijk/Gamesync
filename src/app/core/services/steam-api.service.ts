@@ -1,6 +1,6 @@
 import { inject, Injectable, InjectionToken } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, of, map, switchMap } from 'rxjs';
+import { Observable, of, map, switchMap, catchError } from 'rxjs';
 import { CacheService, DEFAULT_CACHE_TTL_MS } from './cache.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { Game, GameMetadata } from '../models/game.model';
@@ -77,9 +77,14 @@ export class SteamApiService {
   ): Observable<Game[]> {
     const cacheKey = `steam_owned_${config.steamId}`;
     const cached = this.cache.get<Game[]>(cacheKey);
-    if (cached) return of(cached);
+    if (cached) {
+      console.log(`[Steam] owned-games cache hit for steamId=${config.steamId}`);
+      return of(cached);
+    }
 
     const url = `${this.backendUrl}/owned-games`;
+    console.log(`[Steam] GET ${url} (steamId=${config.steamId})`);
+
     const params = new HttpParams()
       .set('key', config.apiKey)
       .set('steamid', config.steamId);
@@ -88,6 +93,7 @@ export class SteamApiService {
       this.http.get<SteamOwnedGamesResponse>(url, { params }).pipe(
         map(res => {
           const rawGames = res.response.games ?? [];
+          console.log(`[Steam] owned-games response: ${rawGames.length} game(s)`);
           const games: Game[] = rawGames.map(g => ({
             id: `${storeId}_${g.appid}`,
             appId: String(g.appid),
@@ -97,6 +103,10 @@ export class SteamApiService {
           }));
           this.cache.set(cacheKey, games, OWNED_GAMES_TTL);
           return games;
+        }),
+        catchError(err => {
+          console.error('[Steam] owned-games request failed:', err?.status, err?.message, err);
+          throw err;
         }),
       ),
     );
@@ -108,10 +118,14 @@ export class SteamApiService {
   getAppMetadata(appId: string): Observable<GameMetadata> {
     const cacheKey = `steam_meta_${appId}`;
     const cached = this.cache.get<GameMetadata>(cacheKey);
-    if (cached) return of(cached);
+    if (cached) {
+      console.log(`[Steam] metadata cache hit for appId=${appId}`);
+      return of(cached);
+    }
 
     const detailsUrl = `${this.backendUrl}/app-details`;
     const reviewsUrl = `${this.backendUrl}/reviews/${appId}`;
+    console.log(`[Steam] fetching metadata for appId=${appId}`);
 
     return this.rateLimiter.enqueue(() =>
       this.http
@@ -122,8 +136,10 @@ export class SteamApiService {
           switchMap(res => {
             const entry = res[appId];
             const details = entry?.success ? entry.data : undefined;
+            if (!details) {
+              console.warn(`[Steam] app-details: no data for appId=${appId} (success=${entry?.success})`);
+            }
 
-            // Extract year from date string like "10 Oct, 2007" or "2007-10-10"
             const yearPublished = details?.release_date?.date
               ? this.parseYear(details.release_date.date)
               : undefined;
@@ -133,7 +149,6 @@ export class SteamApiService {
               ...(details?.categories?.map(c => c.description) ?? []),
             ];
 
-            // Fetch review score in a separate (rate-limited) call
             return this.rateLimiter.enqueue(() =>
               this.http
                 .get<SteamReviewsResponse>(reviewsUrl, {
@@ -162,8 +177,16 @@ export class SteamApiService {
                     this.cache.set(cacheKey, metadata, METADATA_TTL);
                     return metadata;
                   }),
+                  catchError(err => {
+                    console.error(`[Steam] reviews request failed for appId=${appId}:`, err?.status, err?.message);
+                    throw err;
+                  }),
                 ),
             );
+          }),
+          catchError(err => {
+            console.error(`[Steam] app-details request failed for appId=${appId}:`, err?.status, err?.message);
+            throw err;
           }),
         ),
     );

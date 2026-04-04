@@ -1,6 +1,6 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { Observable, forkJoin, of, switchMap } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { tap, catchError } from 'rxjs/operators';
 import { Game } from '../models/game.model';
 import {
   EpicConnectionConfig,
@@ -31,9 +31,16 @@ export class GameLibraryService {
   syncAll(): Observable<Game[]> {
     const connections = this.connectionSvc.connections();
     if (connections.length === 0) {
+      console.log('[Gamesync] syncAll: no connections configured');
       this._games.set([]);
       return of([]);
     }
+
+    console.group(`[Gamesync] syncAll — ${connections.length} connection(s)`);
+    connections.forEach(c =>
+      console.log(`  • ${c.type.toUpperCase()} "${c.label}" (${c.id})`),
+    );
+    console.groupEnd();
 
     this._syncing.set(true);
     this._error.set(null);
@@ -44,10 +51,14 @@ export class GameLibraryService {
       tap({
         next: results => {
           const allGames = results.flat();
+          console.log(
+            `[Gamesync] syncAll complete — ${allGames.length} game(s) across ${connections.length} connection(s)`,
+          );
           this._games.set(allGames);
           this._syncing.set(false);
         },
         error: err => {
+          console.error('[Gamesync] syncAll failed (forkJoin top-level):', err);
           this._error.set(err?.message ?? 'Sync failed');
           this._syncing.set(false);
         },
@@ -72,20 +83,41 @@ export class GameLibraryService {
   }
 
   private fetchForConnection(conn: StoreConnection): Observable<Game[]> {
+    console.log(`[Gamesync] fetching "${conn.label}" (${conn.type})`);
+    let fetch$: Observable<Game[]>;
+
     switch (conn.type) {
       case 'steam':
-        return this.steamApi.getOwnedGames(
+        fetch$ = this.steamApi.getOwnedGames(
           conn.config as SteamConnectionConfig,
           conn.id,
         );
+        break;
       case 'epic':
-        return this.epicApi.getOwnedGames(
+        fetch$ = this.epicApi.getOwnedGames(
           conn.config as EpicConnectionConfig,
           conn.id,
           conn.id,
         );
+        break;
       default:
         return of([]);
     }
+
+    return fetch$.pipe(
+      tap(games =>
+        console.log(
+          `[Gamesync] "${conn.label}" → ${games.length} game(s)`,
+        ),
+      ),
+      catchError(err => {
+        console.error(
+          `[Gamesync] "${conn.label}" (${conn.type}) fetch failed:`,
+          err,
+        );
+        // Re-throw so forkJoin propagates the error and the UI shows it
+        throw err;
+      }),
+    );
   }
 }

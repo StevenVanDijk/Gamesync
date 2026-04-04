@@ -1,7 +1,7 @@
 import { inject, Injectable, InjectionToken } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, switchMap, of } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { map, catchError } from 'rxjs/operators';
 import { Game } from '../models/game.model';
 import { EpicConnectionConfig } from '../models/store-connection.model';
 import { StoreConnectionService } from './store-connection.service';
@@ -44,14 +44,27 @@ export class EpicApiService {
 
   /** Returns the Epic authorization URL to redirect the user to. */
   getAuthUrl(): Observable<string> {
+    console.log('[Epic] fetching auth URL');
     return this.http
       .get<{ url: string }>(`${this.backendUrl}/auth-url`)
-      .pipe(map(r => r.url));
+      .pipe(
+        map(r => r.url),
+        catchError(err => {
+          console.error('[Epic] auth-url request failed:', err?.status, err?.message);
+          throw err;
+        }),
+      );
   }
 
   /** Exchange an authorization code for tokens + account info. */
   exchangeCode(code: string): Observable<TokenResponse> {
-    return this.http.post<TokenResponse>(`${this.backendUrl}/token`, { code });
+    console.log('[Epic] exchanging authorization code for tokens');
+    return this.http.post<TokenResponse>(`${this.backendUrl}/token`, { code }).pipe(
+      catchError(err => {
+        console.error('[Epic] token exchange failed:', err?.status, err?.message, err?.error);
+        throw err;
+      }),
+    );
   }
 
   /**
@@ -59,14 +72,16 @@ export class EpicApiService {
    */
   getOwnedGames(config: EpicConnectionConfig, connectionId: string, storeId: string): Observable<Game[]> {
     return this.withFreshToken(config, connectionId).pipe(
-      switchMap(accessToken =>
-        this.http
+      switchMap(accessToken => {
+        console.log(`[Epic] GET library for accountId=${config.accountId}`);
+        return this.http
           .get<{ games: LibraryGame[] }>(`${this.backendUrl}/library/${config.accountId}`, {
             params: { accessToken },
           })
           .pipe(
-            map(res =>
-              res.games.map((g, i) => ({
+            map(res => {
+              console.log(`[Epic] library response: ${res.games.length} game(s)`);
+              return res.games.map((g, i) => ({
                 id: `${storeId}_${g.appId}_${i}`,
                 appId: g.appId,
                 storeId,
@@ -75,10 +90,17 @@ export class EpicApiService {
                 metadata: g.imageUrl
                   ? { imageUrl: g.imageUrl, fetchedAt: Date.now() }
                   : undefined,
-              })),
-            ),
-          ),
-      ),
+              }));
+            }),
+            catchError(err => {
+              console.error(
+                `[Epic] library request failed for accountId=${config.accountId}:`,
+                err?.status, err?.message, err?.error,
+              );
+              throw err;
+            }),
+          );
+      }),
     );
   }
 
@@ -92,11 +114,14 @@ export class EpicApiService {
       return of(config.accessToken);
     }
 
+    const expiresAt = new Date(config.expiresAt).toISOString();
+    console.log(`[Epic] access token expired (expiresAt=${expiresAt}), refreshing…`);
+
     return this.http
       .post<RefreshResponse>(`${this.backendUrl}/refresh`, { refreshToken: config.refreshToken })
       .pipe(
         map(r => {
-          // Persist the updated tokens
+          console.log('[Epic] token refreshed successfully');
           this.connectionSvc.update(connectionId, {
             config: {
               ...config,
@@ -106,6 +131,10 @@ export class EpicApiService {
             },
           });
           return r.accessToken;
+        }),
+        catchError(err => {
+          console.error('[Epic] token refresh failed:', err?.status, err?.message, err?.error);
+          throw err;
         }),
       );
   }
