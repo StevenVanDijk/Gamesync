@@ -13,6 +13,15 @@
       <mat-icon>link</mat-icon>
       <span class="nav-label">Connections</span>
     </a>
+    <a mat-button routerLink="/logs" routerLinkActive="nav-active" class="nav-link">
+      <mat-icon
+        [matBadge]="logger.unseenErrors()"
+        [matBadgeHidden]="logger.unseenErrors() === 0"
+        matBadgeColor="warn"
+        matBadgeSize="small"
+      >receipt_long</mat-icon>
+      <span class="nav-label">Logs</span>
+    </a>
   </nav>
 </mat-toolbar>
 

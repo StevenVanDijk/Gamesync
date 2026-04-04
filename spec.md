@@ -115,6 +115,21 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-013: In-app sync log viewer
+**As a** user,
+**I want** to see a log of sync activity and errors in the app itself,
+**So that** I can diagnose problems without opening browser DevTools.
+
+**Acceptance criteria:**
+- [ ] A dedicated Logs screen lists all sync log entries (info, warn, error)
+- [ ] Each entry shows its timestamp, severity level, and message
+- [ ] Error entries are visually distinct (red)
+- [ ] A badge on the Logs nav link shows the number of unseen errors
+- [ ] The user can clear all log entries
+- [ ] Logs are readable on mobile
+
+---
+
 ### US-012: Epic Games library via API
 **As a** user,
 **I want** to connect my Epic Games account using OAuth so my library is automatically imported,

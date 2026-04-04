@@ -24,7 +24,7 @@ describe('App shell (US-007)', () => {
     expect(text).toContain('Gamesync');
   });
 
-  it('should contain navigation links for Library and Connections', async () => {
+  it('should contain navigation links for Library, Connections, and Logs', async () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -32,5 +32,6 @@ describe('App shell (US-007)', () => {
     const texts = Array.from(links).map((l: any) => l.textContent.trim());
     expect(texts.some((t: string) => t.includes('Library'))).toBe(true);
     expect(texts.some((t: string) => t.includes('Connections'))).toBe(true);
+    expect(texts.some((t: string) => t.includes('Logs'))).toBe(true);
   });
 });

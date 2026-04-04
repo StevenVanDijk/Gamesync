@@ -33,14 +33,14 @@ describe('Mobile rendering – App shell (US-010)', () => {
 
   it('should wrap nav labels in .nav-label so CSS can hide text on small screens', () => {
     const labels = fixture.nativeElement.querySelectorAll('.nav-label');
-    expect(labels.length).toBe(2); // Library + Connections
+    expect(labels.length).toBe(3); // Library + Connections + Logs
   });
 
   it('should have nav links inside an .app-nav container for targeted CSS', () => {
     const nav = fixture.nativeElement.querySelector('.app-nav');
     expect(nav).toBeTruthy();
     const links = nav.querySelectorAll('a[mat-button]');
-    expect(links.length).toBe(2);
+    expect(links.length).toBe(3);
   });
 
   it('should not render the app title inside an icon element (text must be separate)', () => {

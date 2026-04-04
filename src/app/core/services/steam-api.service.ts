@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, of, map, switchMap, catchError } from 'rxjs';
 import { CacheService, DEFAULT_CACHE_TTL_MS } from './cache.service';
 import { RateLimiterService } from './rate-limiter.service';
+import { LoggingService } from './logging.service';
 import { Game, GameMetadata } from '../models/game.model';
 import { SteamConnectionConfig } from '../models/store-connection.model';
 
@@ -61,12 +62,15 @@ export const STEAM_BACKEND_URL = new InjectionToken<string>('STEAM_BACKEND_URL',
 const METADATA_TTL = DEFAULT_CACHE_TTL_MS;
 const OWNED_GAMES_TTL = 60 * 60 * 1000;
 
+const TAG = 'Steam';
+
 @Injectable({ providedIn: 'root' })
 export class SteamApiService {
   private readonly http = inject(HttpClient);
   private readonly cache = inject(CacheService);
   private readonly rateLimiter = inject(RateLimiterService);
   private readonly backendUrl = inject(STEAM_BACKEND_URL);
+  private readonly logger = inject(LoggingService);
 
   /**
    * Fetch the list of owned games for a Steam user via the backend proxy.
@@ -78,12 +82,12 @@ export class SteamApiService {
     const cacheKey = `steam_owned_${config.steamId}`;
     const cached = this.cache.get<Game[]>(cacheKey);
     if (cached) {
-      console.log(`[Steam] owned-games cache hit for steamId=${config.steamId}`);
+      this.logger.info(TAG, `owned-games cache hit (steamId=${config.steamId})`);
       return of(cached);
     }
 
     const url = `${this.backendUrl}/owned-games`;
-    console.log(`[Steam] GET ${url} (steamId=${config.steamId})`);
+    this.logger.info(TAG, `GET ${url} (steamId=${config.steamId})`);
 
     const params = new HttpParams()
       .set('key', config.apiKey)
@@ -93,7 +97,7 @@ export class SteamApiService {
       this.http.get<SteamOwnedGamesResponse>(url, { params }).pipe(
         map(res => {
           const rawGames = res.response.games ?? [];
-          console.log(`[Steam] owned-games response: ${rawGames.length} game(s)`);
+          this.logger.info(TAG, `owned-games: ${rawGames.length} game(s) received`);
           const games: Game[] = rawGames.map(g => ({
             id: `${storeId}_${g.appid}`,
             appId: String(g.appid),
@@ -105,7 +109,11 @@ export class SteamApiService {
           return games;
         }),
         catchError(err => {
-          console.error('[Steam] owned-games request failed:', err?.status, err?.message, err);
+          this.logger.error(
+            TAG,
+            `owned-games failed — HTTP ${err?.status ?? '?'}: ${err?.message ?? err}`,
+            err,
+          );
           throw err;
         }),
       ),
@@ -119,13 +127,13 @@ export class SteamApiService {
     const cacheKey = `steam_meta_${appId}`;
     const cached = this.cache.get<GameMetadata>(cacheKey);
     if (cached) {
-      console.log(`[Steam] metadata cache hit for appId=${appId}`);
+      this.logger.info(TAG, `metadata cache hit (appId=${appId})`);
       return of(cached);
     }
 
     const detailsUrl = `${this.backendUrl}/app-details`;
     const reviewsUrl = `${this.backendUrl}/reviews/${appId}`;
-    console.log(`[Steam] fetching metadata for appId=${appId}`);
+    this.logger.info(TAG, `fetching metadata for appId=${appId}`);
 
     return this.rateLimiter.enqueue(() =>
       this.http
@@ -137,7 +145,10 @@ export class SteamApiService {
             const entry = res[appId];
             const details = entry?.success ? entry.data : undefined;
             if (!details) {
-              console.warn(`[Steam] app-details: no data for appId=${appId} (success=${entry?.success})`);
+              this.logger.warn(
+                TAG,
+                `app-details: no data returned for appId=${appId} (success=${entry?.success})`,
+              );
             }
 
             const yearPublished = details?.release_date?.date
@@ -178,14 +189,22 @@ export class SteamApiService {
                     return metadata;
                   }),
                   catchError(err => {
-                    console.error(`[Steam] reviews request failed for appId=${appId}:`, err?.status, err?.message);
+                    this.logger.error(
+                      TAG,
+                      `reviews failed for appId=${appId} — HTTP ${err?.status ?? '?'}: ${err?.message ?? err}`,
+                      err,
+                    );
                     throw err;
                   }),
                 ),
             );
           }),
           catchError(err => {
-            console.error(`[Steam] app-details request failed for appId=${appId}:`, err?.status, err?.message);
+            this.logger.error(
+              TAG,
+              `app-details failed for appId=${appId} — HTTP ${err?.status ?? '?'}: ${err?.message ?? err}`,
+              err,
+            );
             throw err;
           }),
         ),

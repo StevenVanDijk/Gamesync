@@ -10,12 +10,16 @@ import {
 import { StoreConnectionService } from './store-connection.service';
 import { SteamApiService } from './steam-api.service';
 import { EpicApiService } from './epic-api.service';
+import { LoggingService } from './logging.service';
+
+const TAG = 'Gamesync';
 
 @Injectable({ providedIn: 'root' })
 export class GameLibraryService {
   private readonly connectionSvc = inject(StoreConnectionService);
   private readonly steamApi = inject(SteamApiService);
   private readonly epicApi = inject(EpicApiService);
+  private readonly logger = inject(LoggingService);
 
   private readonly _games = signal<Game[]>([]);
   private readonly _syncing = signal(false);
@@ -31,16 +35,13 @@ export class GameLibraryService {
   syncAll(): Observable<Game[]> {
     const connections = this.connectionSvc.connections();
     if (connections.length === 0) {
-      console.log('[Gamesync] syncAll: no connections configured');
+      this.logger.info(TAG, 'syncAll: no connections configured');
       this._games.set([]);
       return of([]);
     }
 
-    console.group(`[Gamesync] syncAll — ${connections.length} connection(s)`);
-    connections.forEach(c =>
-      console.log(`  • ${c.type.toUpperCase()} "${c.label}" (${c.id})`),
-    );
-    console.groupEnd();
+    const names = connections.map(c => `${c.type.toUpperCase()} "${c.label}"`).join(', ');
+    this.logger.info(TAG, `syncAll started — ${connections.length} connection(s): ${names}`);
 
     this._syncing.set(true);
     this._error.set(null);
@@ -51,15 +52,17 @@ export class GameLibraryService {
       tap({
         next: results => {
           const allGames = results.flat();
-          console.log(
-            `[Gamesync] syncAll complete — ${allGames.length} game(s) across ${connections.length} connection(s)`,
+          this.logger.info(
+            TAG,
+            `syncAll complete — ${allGames.length} game(s) across ${connections.length} connection(s)`,
           );
           this._games.set(allGames);
           this._syncing.set(false);
         },
         error: err => {
-          console.error('[Gamesync] syncAll failed (forkJoin top-level):', err);
-          this._error.set(err?.message ?? 'Sync failed');
+          const msg = err?.message ?? 'Sync failed';
+          this.logger.error(TAG, `syncAll failed: ${msg}`, err);
+          this._error.set(msg);
           this._syncing.set(false);
         },
       }),
@@ -83,7 +86,7 @@ export class GameLibraryService {
   }
 
   private fetchForConnection(conn: StoreConnection): Observable<Game[]> {
-    console.log(`[Gamesync] fetching "${conn.label}" (${conn.type})`);
+    this.logger.info(TAG, `fetching "${conn.label}" (${conn.type})`);
     let fetch$: Observable<Game[]>;
 
     switch (conn.type) {
@@ -106,16 +109,14 @@ export class GameLibraryService {
 
     return fetch$.pipe(
       tap(games =>
-        console.log(
-          `[Gamesync] "${conn.label}" → ${games.length} game(s)`,
-        ),
+        this.logger.info(TAG, `"${conn.label}" → ${games.length} game(s)`),
       ),
       catchError(err => {
-        console.error(
-          `[Gamesync] "${conn.label}" (${conn.type}) fetch failed:`,
+        this.logger.error(
+          TAG,
+          `"${conn.label}" (${conn.type}) fetch failed: ${err?.message ?? err}`,
           err,
         );
-        // Re-throw so forkJoin propagates the error and the UI shows it
         throw err;
       }),
     );
