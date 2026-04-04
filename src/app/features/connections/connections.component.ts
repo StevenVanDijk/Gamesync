@@ -74,6 +74,12 @@ import { AddConnectionDialogComponent } from './add-connection-dialog/add-connec
                     {{ maskKey(steamCfg(conn).apiKey) }}
                   </p>
                 }
+                @if (conn.type === 'epic') {
+                  <p class="detail-line">
+                    <strong>Account:</strong>
+                    {{ epicCfg(conn).displayName ?? epicCfg(conn).accountId }}
+                  </p>
+                }
                 @if (conn.lastSyncedAt) {
                   <p class="detail-line synced-at">
                     Last synced: {{ conn.lastSyncedAt | date:'medium' }}
@@ -139,6 +145,10 @@ export class ConnectionsComponent {
 
   steamCfg(conn: StoreConnection): SteamConnectionConfig {
     return conn.config as SteamConnectionConfig;
+  }
+
+  epicCfg(conn: StoreConnection): EpicConnectionConfig {
+    return conn.config as EpicConnectionConfig;
   }
 
   maskKey(key: string): string {

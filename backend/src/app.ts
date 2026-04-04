@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { steamRouter } from './routes/steam';
+import { epicRouter } from './routes/epic';
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.use(
 );
 
 app.use('/api/steam', steamRouter);
+app.use('/api/epic', epicRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 

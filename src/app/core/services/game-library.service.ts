@@ -9,17 +9,13 @@ import {
 } from '../models/store-connection.model';
 import { StoreConnectionService } from './store-connection.service';
 import { SteamApiService } from './steam-api.service';
-
-interface EpicGameImport {
-  appId: string;
-  name: string;
-  hoursPlayed: number;
-}
+import { EpicApiService } from './epic-api.service';
 
 @Injectable({ providedIn: 'root' })
 export class GameLibraryService {
   private readonly connectionSvc = inject(StoreConnectionService);
   private readonly steamApi = inject(SteamApiService);
+  private readonly epicApi = inject(EpicApiService);
 
   private readonly _games = signal<Game[]>([]);
   private readonly _syncing = signal(false);
@@ -83,26 +79,13 @@ export class GameLibraryService {
           conn.id,
         );
       case 'epic':
-        return of(this.parseEpicGames(conn));
+        return this.epicApi.getOwnedGames(
+          conn.config as EpicConnectionConfig,
+          conn.id,
+          conn.id,
+        );
       default:
         return of([]);
-    }
-  }
-
-  private parseEpicGames(conn: StoreConnection): Game[] {
-    const cfg = conn.config as EpicConnectionConfig;
-    if (!cfg.gamesJson) return [];
-    try {
-      const imports: EpicGameImport[] = JSON.parse(cfg.gamesJson);
-      return imports.map(g => ({
-        id: `${conn.id}_${g.appId}`,
-        appId: g.appId,
-        storeId: conn.id,
-        name: g.name,
-        hoursPlayed: g.hoursPlayed,
-      }));
-    } catch {
-      return [];
     }
   }
 }

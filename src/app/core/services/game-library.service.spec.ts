@@ -5,8 +5,9 @@ import { Observable, firstValueFrom } from 'rxjs';
 import { GameLibraryService } from './game-library.service';
 import { StoreConnectionService } from './store-connection.service';
 import { RateLimiterService } from './rate-limiter.service';
-import { CacheService } from './cache.service';
-import { SteamConnectionConfig } from '../models/store-connection.model';
+import { SteamConnectionConfig, EpicConnectionConfig } from '../models/store-connection.model';
+import { STEAM_BACKEND_URL } from './steam-api.service';
+import { EPIC_BACKEND_URL } from './epic-api.service';
 
 function makeImmediateRateLimiter(): Partial<RateLimiterService> {
   return {
@@ -15,6 +16,9 @@ function makeImmediateRateLimiter(): Partial<RateLimiterService> {
     enqueue: <T>(fn: () => Observable<T>) => fn(),
   };
 }
+
+const TEST_STEAM = 'http://test-steam/api/steam';
+const TEST_EPIC = 'http://test-epic/api/epic';
 
 describe('GameLibraryService (US-001, US-004, US-008)', () => {
   let librarySvc: GameLibraryService;
@@ -26,10 +30,21 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     steamId: '76561198000000001',
   };
 
+  const epicConfig: EpicConnectionConfig = {
+    accountId: 'epic-acc-123',
+    accessToken: 'at_valid',
+    refreshToken: 'rt_valid',
+    expiresAt: Date.now() + 3_600_000, // 1h in the future, no refresh needed
+  };
+
   const ownedGamesFlush = {
     response: {
       games: [{ appid: 440, name: 'TF2', playtime_forever: 120 }],
     },
+  };
+
+  const epicLibraryFlush = {
+    games: [{ appId: 'fn', name: 'Fortnite', hoursPlayed: 0, imageUrl: 'img.jpg' }],
   };
 
   beforeEach(() => {
@@ -39,6 +54,8 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: RateLimiterService, useValue: makeImmediateRateLimiter() },
+        { provide: STEAM_BACKEND_URL, useValue: TEST_STEAM },
+        { provide: EPIC_BACKEND_URL, useValue: TEST_EPIC },
       ],
     });
     librarySvc = TestBed.inject(GameLibraryService);
@@ -67,24 +84,29 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     expect(librarySvc.games()[0].hoursPlayed).toBe(2);
   });
 
-  it('should parse Epic games from imported JSON (US-003)', async () => {
-    const epicJson = '[{"appId":"fn","name":"Fortnite","hoursPlayed":5}]';
-    connectionSvc.add('epic', 'My Epic', { gamesJson: epicJson });
+  it('should fetch Epic games via API (US-003, US-012)', async () => {
+    connectionSvc.add('epic', 'My Epic', epicConfig);
 
-    await firstValueFrom(librarySvc.syncAll());
-    httpMock.expectNone(() => true);
+    const resultPromise = firstValueFrom(librarySvc.syncAll());
+    httpMock
+      .expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`))
+      .flush(epicLibraryFlush);
 
+    await resultPromise;
     expect(librarySvc.gameCount()).toBe(1);
     expect(librarySvc.games()[0].name).toBe('Fortnite');
-    expect(librarySvc.games()[0].hoursPlayed).toBe(5);
+    expect(librarySvc.games()[0].hoursPlayed).toBe(0);
   });
 
-  it('should aggregate games from multiple connections (US-001)', async () => {
+  it('should aggregate games from Steam and Epic (US-001)', async () => {
     connectionSvc.add('steam', 'Steam', steamConfig);
-    connectionSvc.add('epic', 'Epic', { gamesJson: '[{"appId":"fn","name":"Fortnite","hoursPlayed":5}]' });
+    connectionSvc.add('epic', 'Epic', epicConfig);
 
     const resultPromise = firstValueFrom(librarySvc.syncAll());
     httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
+    httpMock
+      .expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`))
+      .flush(epicLibraryFlush);
     await resultPromise;
 
     expect(librarySvc.gameCount()).toBe(2);

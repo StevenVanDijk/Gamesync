@@ -31,7 +31,12 @@ describe('StoreConnectionService (US-002, US-003, US-008)', () => {
   });
 
   it('should add an Epic Games connection (US-003)', () => {
-    service.add('epic', 'My Epic', { gamesJson: '[]' });
+    service.add('epic', 'My Epic', {
+      accountId: 'acc123',
+      accessToken: 'at_abc',
+      refreshToken: 'rt_xyz',
+      expiresAt: Date.now() + 3_600_000,
+    });
     expect(service.connections()[0].type).toBe('epic');
   });
 

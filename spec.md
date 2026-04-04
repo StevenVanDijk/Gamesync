@@ -115,6 +115,20 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-012: Epic Games library via API
+**As a** user,
+**I want** to connect my Epic Games account using OAuth so my library is automatically imported,
+**So that** I don't have to manually export and paste JSON.
+
+**Acceptance criteria:**
+- [ ] User can initiate OAuth login with Epic from the connections dialog
+- [ ] The backend handles the OAuth callback and exchanges the code for tokens
+- [ ] Owned games are fetched from the Epic entitlements API and displayed in the library
+- [ ] Since Epic provides no playtime data, hours played is shown as 0
+- [ ] The connection stores the Epic account ID (not raw credentials)
+
+---
+
 ### US-011: Backend proxy for Steam API (CORS-free)
 **As a** developer,
 **I want** a Node.js/Express backend to proxy Steam API requests,

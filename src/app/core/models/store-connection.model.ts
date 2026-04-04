@@ -6,11 +6,16 @@ export interface SteamConnectionConfig {
 }
 
 export interface EpicConnectionConfig {
-  /**
-   * Raw JSON payload of Epic games (manual import).
-   * Expected shape: Array<{ appId: string; name: string; hoursPlayed: number }>
-   */
-  gamesJson?: string;
+  /** Epic account ID returned after OAuth. */
+  accountId: string;
+  /** Display name of the connected Epic account. */
+  displayName?: string;
+  /** OAuth access token (may expire; refresh using refreshToken). */
+  accessToken: string;
+  /** OAuth refresh token for renewing the access token. */
+  refreshToken: string;
+  /** Unix timestamp (ms) when the access token expires. */
+  expiresAt: number;
 }
 
 export type ConnectionConfig = SteamConnectionConfig | EpicConnectionConfig;

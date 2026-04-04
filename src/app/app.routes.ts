@@ -21,5 +21,12 @@ export const routes: Routes = [
         m => m.ConnectionsComponent,
       ),
   },
+  {
+    path: 'epic-callback',
+    loadComponent: () =>
+      import('./features/epic-callback/epic-callback.component').then(
+        m => m.EpicCallbackComponent,
+      ),
+  },
   { path: '**', redirectTo: 'library' },
 ];
