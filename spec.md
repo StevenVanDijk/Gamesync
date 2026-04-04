@@ -102,6 +102,19 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-010: App renders correctly on mobile devices
+**As a** user,
+**I want** the app to display icons and a usable layout on my phone,
+**So that** I can manage my game library on a mobile screen.
+
+**Acceptance criteria:**
+- [ ] Material icons render as icons, not as raw text ligatures
+- [ ] The top toolbar fits on a narrow (≤ 400 px) screen without overflow
+- [ ] The library controls (search, sort, sync) stack vertically on mobile
+- [ ] The game grid adapts to a single column on small screens
+
+---
+
 ### US-009: Successful build required
 **As a** developer,
 **I want** every change to produce a passing production build,

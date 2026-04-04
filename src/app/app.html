@@ -4,14 +4,16 @@
 
   <span class="spacer"></span>
 
-  <a mat-button routerLink="/library" routerLinkActive="nav-active">
-    <mat-icon>library_books</mat-icon>
-    Library
-  </a>
-  <a mat-button routerLink="/connections" routerLinkActive="nav-active">
-    <mat-icon>link</mat-icon>
-    Connections
-  </a>
+  <nav class="app-nav">
+    <a mat-button routerLink="/library" routerLinkActive="nav-active" class="nav-link">
+      <mat-icon>library_books</mat-icon>
+      <span class="nav-label">Library</span>
+    </a>
+    <a mat-button routerLink="/connections" routerLinkActive="nav-active" class="nav-link">
+      <mat-icon>link</mat-icon>
+      <span class="nav-label">Connections</span>
+    </a>
+  </nav>
 </mat-toolbar>
 
 <main class="app-content">

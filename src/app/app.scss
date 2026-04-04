@@ -2,10 +2,10 @@
   position: sticky;
   top: 0;
   z-index: 100;
-  gap: 8px;
 }
 
 .app-logo {
+  flex-shrink: 0;
   margin-right: 4px;
 }
 
@@ -13,14 +13,48 @@
   font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .spacer {
   flex: 1;
+  min-width: 8px;
+}
+
+.app-nav {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px !important;
+  min-width: 0 !important;
 }
 
 .nav-active {
   background: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Hide nav text labels on narrow screens — icons alone are sufficient */
+@media (max-width: 480px) {
+  .app-title {
+    display: none;
+  }
+
+  .nav-label {
+    display: none;
+  }
+
+  .nav-link {
+    padding: 0 4px !important;
+    min-width: 40px !important;
+    justify-content: center;
+  }
 }
 
 .app-content {

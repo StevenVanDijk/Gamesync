@@ -51,7 +51,7 @@ import { Game } from '../../core/models/game.model';
             </mat-select>
           </mat-form-field>
 
-          <button mat-flat-button color="primary" (click)="sync()" [disabled]="librarySvc.syncing()">
+          <button mat-flat-button color="primary" class="sync-btn" (click)="sync()" [disabled]="librarySvc.syncing()">
             <mat-icon>sync</mat-icon>
             Sync
           </button>
@@ -93,21 +93,22 @@ import { Game } from '../../core/models/game.model';
     </div>
   `,
   styles: [`
-    .library-container { padding: 16px; max-width: 1400px; margin: 0 auto; }
-    .library-header { margin-bottom: 16px; }
+    .library-container { padding: 12px; max-width: 1400px; margin: 0 auto; }
+    .library-header { margin-bottom: 12px; }
     .search-bar {
       display: flex;
-      align-items: center;
-      gap: 12px;
+      align-items: flex-start;
+      gap: 8px;
       flex-wrap: wrap;
     }
-    .search-field { flex: 1; min-width: 200px; }
-    .sort-field { width: 160px; }
-    .game-count { margin: 4px 0 0; font-size: 13px; color: #aaa; }
+    .search-field { flex: 1; min-width: 140px; }
+    .sort-field { width: 140px; }
+    .sync-btn { margin-top: 4px; flex-shrink: 0; }
+    .game-count { margin: 0 0 8px; font-size: 13px; color: #aaa; }
     .game-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
     }
     .loading-state, .empty-state {
       display: flex;
@@ -119,6 +120,14 @@ import { Game } from '../../core/models/game.model';
       color: #888;
     }
     .empty-state mat-icon { font-size: 56px; width: 56px; height: 56px; }
+
+    @media (max-width: 480px) {
+      .library-container { padding: 8px; }
+      .search-bar { flex-direction: column; align-items: stretch; }
+      .search-field, .sort-field { width: 100%; min-width: 0; }
+      .sync-btn { width: 100%; }
+      .game-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    }
   `],
 })
 export class LibraryComponent implements OnInit {
