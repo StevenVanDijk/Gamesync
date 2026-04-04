@@ -74,14 +74,6 @@ import { StoreType } from '../../../core/models/store-connection.model';
             }
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>CORS Proxy URL (optional)</mat-label>
-            <input matInput formControlName="proxyUrl" placeholder="https://my-proxy.example.com/steam" />
-            <mat-hint>
-              Required for fetching your owned games list from a browser.
-              Leave blank if your backend proxies the request.
-            </mat-hint>
-          </mat-form-field>
         }
 
         @if (form.get('type')?.value === 'epic') {
@@ -131,7 +123,6 @@ export class AddConnectionDialogComponent {
     label: ['', Validators.required],
     apiKey: [''],
     steamId: ['', Validators.pattern(/^\d{17}$/)],
-    proxyUrl: [''],
     gamesJson: ['', this.jsonValidator],
   });
 
@@ -156,11 +147,11 @@ export class AddConnectionDialogComponent {
 
   submit(): void {
     if (this.form.invalid) return;
-    const { type, label, apiKey, steamId, proxyUrl, gamesJson } = this.form.getRawValue();
+    const { type, label, apiKey, steamId, gamesJson } = this.form.getRawValue();
 
     const config =
       type === 'steam'
-        ? { apiKey: apiKey!, steamId: steamId!, proxyUrl: proxyUrl || undefined }
+        ? { apiKey: apiKey!, steamId: steamId! }
         : { gamesJson: gamesJson || undefined };
 
     this.connectionSvc.add(type as StoreType, label!, config);

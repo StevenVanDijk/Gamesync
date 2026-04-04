@@ -1,4 +1,4 @@
-import { inject, Injectable } from '@angular/core';
+import { inject, Injectable, InjectionToken } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, of, map, switchMap } from 'rxjs';
 import { CacheService, DEFAULT_CACHE_TTL_MS } from './cache.service';
@@ -47,9 +47,15 @@ interface SteamReviewsResponse {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const STEAM_STORE_BASE = 'https://store.steampowered.com';
-/** Default Web API base; replaced by proxyUrl when configured */
-const STEAM_WEB_API_BASE = 'https://api.steampowered.com';
+/**
+ * URL of the backend proxy that forwards requests to the Steam API.
+ * Default: '/api/steam' (relative, works on Vercel and any same-origin host).
+ * Override to 'http://localhost:3000/api/steam' in local dev environments.
+ */
+export const STEAM_BACKEND_URL = new InjectionToken<string>('STEAM_BACKEND_URL', {
+  providedIn: 'root',
+  factory: () => '/api/steam',
+});
 
 /** Cache TTL: 24 hours for metadata, 1 hour for owned-games list */
 const METADATA_TTL = DEFAULT_CACHE_TTL_MS;
@@ -60,12 +66,10 @@ export class SteamApiService {
   private readonly http = inject(HttpClient);
   private readonly cache = inject(CacheService);
   private readonly rateLimiter = inject(RateLimiterService);
+  private readonly backendUrl = inject(STEAM_BACKEND_URL);
 
   /**
-   * Fetch the list of owned games for a Steam user.
-   *
-   * Requires a proxy URL because the Steam Web API does not set CORS headers.
-   * If no proxyUrl is configured the request will fail from a browser context.
+   * Fetch the list of owned games for a Steam user via the backend proxy.
    */
   getOwnedGames(
     config: SteamConnectionConfig,
@@ -75,14 +79,10 @@ export class SteamApiService {
     const cached = this.cache.get<Game[]>(cacheKey);
     if (cached) return of(cached);
 
-    const base = config.proxyUrl ?? STEAM_WEB_API_BASE;
-    const url = `${base}/IPlayerService/GetOwnedGames/v1/`;
+    const url = `${this.backendUrl}/owned-games`;
     const params = new HttpParams()
       .set('key', config.apiKey)
-      .set('steamid', config.steamId)
-      .set('include_appinfo', 'true')
-      .set('include_played_free_games', 'true')
-      .set('format', 'json');
+      .set('steamid', config.steamId);
 
     return this.rateLimiter.enqueue(() =>
       this.http.get<SteamOwnedGamesResponse>(url, { params }).pipe(
@@ -103,23 +103,20 @@ export class SteamApiService {
   }
 
   /**
-   * Fetch rich metadata for a single Steam app from the Store API.
-   * The Store API supports CORS so no proxy is needed for this endpoint.
+   * Fetch rich metadata for a single Steam app via the backend proxy.
    */
   getAppMetadata(appId: string): Observable<GameMetadata> {
     const cacheKey = `steam_meta_${appId}`;
     const cached = this.cache.get<GameMetadata>(cacheKey);
     if (cached) return of(cached);
 
-    const detailsUrl = `${STEAM_STORE_BASE}/api/appdetails`;
-    const reviewsUrl = `${STEAM_STORE_BASE}/appreviews/${appId}`;
+    const detailsUrl = `${this.backendUrl}/app-details`;
+    const reviewsUrl = `${this.backendUrl}/reviews/${appId}`;
 
     return this.rateLimiter.enqueue(() =>
       this.http
         .get<SteamAppDetailsResponse>(detailsUrl, {
-          params: new HttpParams()
-            .set('appids', appId)
-            .set('filters', 'basic,genres,release_date,metacritic'),
+          params: new HttpParams().set('appids', appId),
         })
         .pipe(
           switchMap(res => {

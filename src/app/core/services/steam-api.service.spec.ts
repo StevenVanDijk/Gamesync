@@ -3,7 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Observable } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
-import { SteamApiService } from './steam-api.service';
+import { SteamApiService, STEAM_BACKEND_URL } from './steam-api.service';
 import { CacheService } from './cache.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { SteamConnectionConfig } from '../models/store-connection.model';
@@ -18,7 +18,9 @@ function makeImmediateRateLimiter(): Partial<RateLimiterService> {
   };
 }
 
-describe('SteamApiService (US-002, US-005, US-006)', () => {
+const TEST_BACKEND = 'http://test-backend/api/steam';
+
+describe('SteamApiService (US-002, US-005, US-006, US-011)', () => {
   let service: SteamApiService;
   let httpMock: HttpTestingController;
   let cache: CacheService;
@@ -26,7 +28,6 @@ describe('SteamApiService (US-002, US-005, US-006)', () => {
   const config: SteamConnectionConfig = {
     apiKey: 'TESTKEY123',
     steamId: '76561198000000001',
-    proxyUrl: 'https://proxy.example.com',
   };
 
   beforeEach(() => {
@@ -36,6 +37,7 @@ describe('SteamApiService (US-002, US-005, US-006)', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: RateLimiterService, useValue: makeImmediateRateLimiter() },
+        { provide: STEAM_BACKEND_URL, useValue: TEST_BACKEND },
       ],
     });
     service = TestBed.inject(SteamApiService);
@@ -52,7 +54,7 @@ describe('SteamApiService (US-002, US-005, US-006)', () => {
 
   it('should fetch owned games and convert minutes to hours (US-002, US-004)', async () => {
     const resultPromise = firstValueFrom(service.getOwnedGames(config, 'conn1'));
-    httpMock.expectOne(r => r.url.includes('IPlayerService/GetOwnedGames')).flush({
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/owned-games`).flush({
       response: {
         game_count: 2,
         games: [
@@ -70,10 +72,11 @@ describe('SteamApiService (US-002, US-005, US-006)', () => {
     expect(games[0].storeId).toBe('conn1');
   });
 
-  it('should route owned-games request through proxy URL (US-002)', async () => {
+  it('should route owned-games request through the backend proxy (US-011)', async () => {
     const resultPromise = firstValueFrom(service.getOwnedGames(config, 'conn1'));
-    const req = httpMock.expectOne(r => r.url.startsWith('https://proxy.example.com'));
-    expect(req).toBeTruthy();
+    const req = httpMock.expectOne(r => r.url === `${TEST_BACKEND}/owned-games`);
+    expect(req.request.params.get('key')).toBe('TESTKEY123');
+    expect(req.request.params.get('steamid')).toBe('76561198000000001');
     req.flush({ response: { games: [] } });
     await resultPromise;
   });
@@ -91,10 +94,10 @@ describe('SteamApiService (US-002, US-005, US-006)', () => {
 
   // ── US-005 : metadata ────────────────────────────────────────────────────
 
-  it('should fetch metadata from Steam Store API (US-005)', async () => {
+  it('should fetch metadata via backend proxy (US-005, US-011)', async () => {
     const resultPromise = firstValueFrom(service.getAppMetadata('440'));
 
-    httpMock.expectOne(r => r.url.includes('appdetails')).flush({
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/app-details`).flush({
       '440': {
         success: true,
         data: {
@@ -106,7 +109,7 @@ describe('SteamApiService (US-002, US-005, US-006)', () => {
       },
     });
 
-    httpMock.expectOne(r => r.url.includes('appreviews')).flush({
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/reviews/440`).flush({
       success: 1,
       query_summary: {
         total_positive: 90,
@@ -138,10 +141,10 @@ describe('SteamApiService (US-002, US-005, US-006)', () => {
   it('should set communityScore to undefined when total_reviews is 0 (US-005)', async () => {
     const resultPromise = firstValueFrom(service.getAppMetadata('1'));
 
-    httpMock.expectOne(r => r.url.includes('appdetails')).flush({
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/app-details`).flush({
       '1': { success: true, data: { name: 'X', header_image: '', release_date: { date: '2020' } } },
     });
-    httpMock.expectOne(r => r.url.includes('appreviews')).flush({
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/reviews/1`).flush({
       success: 1,
       query_summary: { total_positive: 0, total_reviews: 0, review_score: 0, review_score_desc: '' },
     });

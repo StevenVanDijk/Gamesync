@@ -24,7 +24,6 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
   const steamConfig: SteamConnectionConfig = {
     apiKey: 'KEY',
     steamId: '76561198000000001',
-    proxyUrl: 'https://proxy.example.com',
   };
 
   const ownedGamesFlush = {
@@ -60,7 +59,7 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
   it('should sync Steam games and expose them in the library (US-001, US-004)', async () => {
     connectionSvc.add('steam', 'My Steam', steamConfig);
     const resultPromise = firstValueFrom(librarySvc.syncAll());
-    httpMock.expectOne(r => r.url.includes('GetOwnedGames')).flush(ownedGamesFlush);
+    httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
 
     await resultPromise;
     expect(librarySvc.gameCount()).toBe(1);
@@ -85,7 +84,7 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     connectionSvc.add('epic', 'Epic', { gamesJson: '[{"appId":"fn","name":"Fortnite","hoursPlayed":5}]' });
 
     const resultPromise = firstValueFrom(librarySvc.syncAll());
-    httpMock.expectOne(r => r.url.includes('GetOwnedGames')).flush(ownedGamesFlush);
+    httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
     await resultPromise;
 
     expect(librarySvc.gameCount()).toBe(2);
@@ -94,7 +93,7 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
   it('should remove games for a deleted connection (US-008)', async () => {
     const conn = connectionSvc.add('steam', 'Steam', steamConfig);
     const p = firstValueFrom(librarySvc.syncAll());
-    httpMock.expectOne(r => r.url.includes('GetOwnedGames')).flush(ownedGamesFlush);
+    httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
     await p;
     expect(librarySvc.gameCount()).toBe(1);
 
@@ -105,7 +104,7 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
   it('should update metadata for a game (US-005)', async () => {
     connectionSvc.add('steam', 'Steam', steamConfig);
     const p = firstValueFrom(librarySvc.syncAll());
-    httpMock.expectOne(r => r.url.includes('GetOwnedGames')).flush(ownedGamesFlush);
+    httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
     await p;
 
     const game = librarySvc.games()[0];

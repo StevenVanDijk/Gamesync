@@ -1,0 +1,8 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/gamesync/browser",
+  "rewrites": [
+    { "source": "/api/steam/(.*)", "destination": "/api/steam" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

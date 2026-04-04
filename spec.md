@@ -115,6 +115,19 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-011: Backend proxy for Steam API (CORS-free)
+**As a** developer,
+**I want** a Node.js/Express backend to proxy Steam API requests,
+**So that** the browser client never makes cross-origin Steam calls and CORS errors are eliminated.
+
+**Acceptance criteria:**
+- [ ] Express app exposes `GET /api/steam/owned-games`, `GET /api/steam/app-details`, and `GET /api/steam/reviews/:appid`
+- [ ] The backend is deployable as a Vercel serverless function
+- [ ] The Angular frontend routes all Steam calls through the backend proxy
+- [ ] Integration tests cover the three proxy routes (happy path + error forwarding)
+
+---
+
 ### US-009: Successful build required
 **As a** developer,
 **I want** every change to produce a passing production build,

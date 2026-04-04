@@ -3,14 +3,6 @@ export type StoreType = 'steam' | 'epic';
 export interface SteamConnectionConfig {
   apiKey: string;
   steamId: string;
-  /**
-   * Optional CORS proxy URL prepended to Steam Web API requests.
-   * Steam's Web API (api.steampowered.com) does not set CORS headers,
-   * so a server-side proxy is required for browser-based requests.
-   * Example: "https://my-proxy.example.com/steam"
-   * Leave blank if running behind your own backend.
-   */
-  proxyUrl?: string;
 }
 
 export interface EpicConnectionConfig {

@@ -73,12 +73,6 @@ import { AddConnectionDialogComponent } from './add-connection-dialog/add-connec
                     <strong>API Key:</strong>
                     {{ maskKey(steamCfg(conn).apiKey) }}
                   </p>
-                  @if (steamCfg(conn).proxyUrl) {
-                    <p class="detail-line">
-                      <strong>Proxy:</strong>
-                      {{ steamCfg(conn).proxyUrl }}
-                    </p>
-                  }
                 }
                 @if (conn.lastSyncedAt) {
                   <p class="detail-line synced-at">
