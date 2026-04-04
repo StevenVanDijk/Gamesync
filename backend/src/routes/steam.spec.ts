@@ -10,7 +10,19 @@ import app from '../app';
 // ── Mock axios ────────────────────────────────────────────────────────────────
 vi.mock('axios', () => {
   const axiosGet = vi.fn();
-  return { default: { get: axiosGet }, AxiosError: class AxiosError extends Error {} };
+  class MockAxiosError extends Error {
+    readonly isAxiosError = true;
+    response?: { status: number; statusText: string; data?: unknown };
+    code?: string;
+  }
+  return {
+    default: {
+      get: axiosGet,
+      isAxiosError: (val: unknown) =>
+        !!val && (val as MockAxiosError).isAxiosError === true,
+    },
+    AxiosError: MockAxiosError,
+  };
 });
 
 import axios from 'axios';

@@ -9,7 +9,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 
 export const epicRouter = Router();
 
@@ -18,11 +18,27 @@ const EPIC_ENTITLEMENTS_BASE = 'https://api.epicgames.dev/epic/ecom/v1/identitie
 const EPIC_CATALOG_URL = 'https://api.epicgames.dev/epic/ecom/v1/catalog/items';
 const EPIC_AUTH_BASE = 'https://www.epicgames.com/id/api/redirect';
 
+const UPSTREAM_TIMEOUT_MS = 8_000;
+
 function forwardError(res: Response, err: unknown): void {
-  if (err instanceof AxiosError && err.response) {
-    res.status(err.response.status).json({ error: err.response.statusText });
+  if (axios.isAxiosError(err)) {
+    if (err.response) {
+      const status = err.response.status;
+      const detail = typeof err.response.data === 'string'
+        ? err.response.data.slice(0, 200)
+        : JSON.stringify(err.response.data ?? {});
+      console.error(`[Epic] upstream HTTP ${status}:`, detail);
+      res.status(status).json({ error: err.response.statusText, detail });
+    } else if (err.code === 'ECONNABORTED' || err.code === 'ERR_CANCELED') {
+      console.error('[Epic] upstream request timed out:', err.message);
+      res.status(504).json({ error: 'Upstream request timed out' });
+    } else {
+      console.error('[Epic] axios error (no response):', err.code, err.message);
+      res.status(502).json({ error: 'Upstream request failed', detail: err.message });
+    }
   } else {
-    res.status(502).json({ error: 'Upstream request failed' });
+    console.error('[Epic] unexpected error:', err);
+    res.status(502).json({ error: 'Upstream request failed', detail: String(err) });
   }
 }
 
@@ -76,6 +92,7 @@ epicRouter.post('/token', async (req: Request, res: Response) => {
         Authorization: `Basic ${basicAuth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
+      timeout: UPSTREAM_TIMEOUT_MS,
     });
 
     // Return only what the frontend needs
@@ -116,6 +133,7 @@ epicRouter.post('/refresh', async (req: Request, res: Response) => {
         Authorization: `Basic ${basicAuth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
+      timeout: UPSTREAM_TIMEOUT_MS,
     });
 
     res.json({
@@ -146,6 +164,7 @@ epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
     const { data } = await axios.get(`${EPIC_ENTITLEMENTS_BASE}/${accountId}/entitlements`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       params: { start: 0, count: 1000, entitlementType: 'EXECUTABLE' },
+      timeout: UPSTREAM_TIMEOUT_MS,
     });
 
     interface Entitlement {

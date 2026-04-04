@@ -11,6 +11,7 @@
     "dev:backend": "tsx backend/src/server.ts"
   },
   "private": true,
+  "type": "module",
   "packageManager": "npm@10.9.7",
   "dependencies": {
     "@angular/animations": "^21.2.7",

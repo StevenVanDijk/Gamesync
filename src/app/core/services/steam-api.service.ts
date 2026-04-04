@@ -109,9 +109,10 @@ export class SteamApiService {
           return games;
         }),
         catchError(err => {
+          const detail = err?.error?.detail ?? err?.error?.error ?? '';
           this.logger.error(
             TAG,
-            `owned-games failed — HTTP ${err?.status ?? '?'}: ${err?.message ?? err}`,
+            `owned-games failed — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
             err,
           );
           throw err;
@@ -189,9 +190,10 @@ export class SteamApiService {
                     return metadata;
                   }),
                   catchError(err => {
+                    const detail = err?.error?.detail ?? err?.error?.error ?? '';
                     this.logger.error(
                       TAG,
-                      `reviews failed for appId=${appId} — HTTP ${err?.status ?? '?'}: ${err?.message ?? err}`,
+                      `reviews failed for appId=${appId} — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
                       err,
                     );
                     throw err;
@@ -200,9 +202,10 @@ export class SteamApiService {
             );
           }),
           catchError(err => {
+            const detail = err?.error?.detail ?? err?.error?.error ?? '';
             this.logger.error(
               TAG,
-              `app-details failed for appId=${appId} — HTTP ${err?.status ?? '?'}: ${err?.message ?? err}`,
+              `app-details failed for appId=${appId} — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
               err,
             );
             throw err;

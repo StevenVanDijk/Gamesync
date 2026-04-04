@@ -97,9 +97,10 @@ export class EpicApiService {
               }));
             }),
             catchError(err => {
+              const detail = err?.error?.detail ?? err?.error?.error ?? '';
               this.logger.error(
                 TAG,
-                `library failed (accountId=${config.accountId}) — HTTP ${err?.status ?? '?'}: ${err?.message ?? err}`,
+                `library failed (accountId=${config.accountId}) — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
                 err,
               );
               throw err;
