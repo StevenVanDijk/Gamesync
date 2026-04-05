@@ -213,6 +213,33 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-018: Community score column in list view
+**As a** user,
+**I want** to see the community score alongside each game in list view, with a live loading indicator while scores are being fetched,
+**So that** I can quickly compare scores without opening each game.
+
+**Acceptance criteria:**
+- [ ] List view is the default view mode
+- [ ] A score column is visible on every list row
+- [ ] While metadata is being fetched for a game, a small spinner is shown in the score column
+- [ ] Once fetched, the score is shown as a coloured percentage badge (green ≥70%, orange 40–69%, red <40%)
+- [ ] If metadata is unavailable (e.g. Epic games), '?' is shown
+- [ ] The score column updates live as background fetches complete — no page reload needed
+
+---
+
+### US-019: Per-connection colour accent in list view
+**As a** user,
+**I want** each store connection to have a distinct colour shown as a thin vertical line before the game name,
+**So that** I can instantly see which store a game comes from while browsing the list.
+
+**Acceptance criteria:**
+- [ ] Each connection is assigned a stable colour from a predefined palette
+- [ ] A thin coloured bar appears on the left edge of every list row
+- [ ] Colours are consistent across renders for the same connection
+
+---
+
 ### US-009: Successful build required
 **As a** developer,
 **I want** every change to produce a passing production build,

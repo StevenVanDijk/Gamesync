@@ -4,12 +4,13 @@ import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Game } from '../../../core/models/game.model';
 
 @Component({
   selector: 'app-game-card',
   standalone: true,
-  imports: [CommonModule, MatCardModule, MatChipsModule, MatIconModule, MatTooltipModule],
+  imports: [CommonModule, MatCardModule, MatChipsModule, MatIconModule, MatTooltipModule, MatProgressSpinnerModule],
   template: `
     <mat-card
       class="game-card"
@@ -20,6 +21,7 @@ import { Game } from '../../../core/models/game.model';
       @if (list()) {
         <!-- ── List row ── -->
         <div class="list-row">
+          <div class="list-accent" [style.background]="connectionColor()"></div>
           <div class="list-thumb">
             @if (game().metadata?.imageUrl) {
               <img [src]="game().metadata?.imageUrl" [alt]="game().name" class="list-img" />
@@ -29,6 +31,20 @@ import { Game } from '../../../core/models/game.model';
           </div>
           <span class="list-name" [title]="game().name">{{ game().name }}</span>
           <span class="list-hours">{{ game().hoursPlayed | number:'1.0-1' }}&thinsp;h</span>
+          <span class="list-score">
+            @if (metadataLoading()) {
+              <mat-spinner diameter="12"></mat-spinner>
+            } @else if (game().metadata?.communityScore !== undefined) {
+              <span
+                class="list-score-badge"
+                [class.score-positive]="(game().metadata?.communityScore ?? 0) >= 70"
+                [class.score-mixed]="(game().metadata?.communityScore ?? 0) >= 40 && (game().metadata?.communityScore ?? 0) < 70"
+                [class.score-negative]="(game().metadata?.communityScore ?? 0) < 40"
+              >{{ game().metadata?.communityScore }}%</span>
+            } @else {
+              <span class="list-score-unknown">?</span>
+            }
+          </span>
         </div>
       } @else {
         <!-- ── Card / compact card ── -->
@@ -107,9 +123,16 @@ import { Game } from '../../../core/models/game.model';
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 5px 10px;
+      padding: 5px 8px 5px 0;
       width: 100%;
       min-width: 0;
+    }
+    .list-accent {
+      width: 3px;
+      height: 100%;
+      min-height: 28px;
+      flex-shrink: 0;
+      border-radius: 0 2px 2px 0;
     }
     .list-thumb {
       width: 44px;
@@ -147,6 +170,24 @@ import { Game } from '../../../core/models/game.model';
       flex-shrink: 0;
       white-space: nowrap;
     }
+    .list-score {
+      width: 44px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .list-score-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 3px;
+      color: #fff;
+    }
+    .list-score-unknown { font-size: 12px; color: #555; }
+    .score-positive { background: #4caf50; }
+    .score-mixed    { background: #ff9800; }
+    .score-negative { background: #f44336; }
 
     /* ── Card (default) image area ── */
     .card-image-wrapper {
@@ -255,4 +296,6 @@ export class GameCardComponent {
   selected = output<Game>();
   compact = input(false);
   list = input(false);
+  metadataLoading = input(false);
+  connectionColor = input('transparent');
 }

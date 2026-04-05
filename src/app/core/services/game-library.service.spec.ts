@@ -210,4 +210,24 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     httpMock.expectNone(() => true);
     expect(result).toEqual([]);
   });
+
+  it('should mark game as fetching while metadata request is in-flight, then clear it (US-018)', async () => {
+    connectionSvc.add('steam', 'Steam', steamConfig);
+    const p = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
+    await p;
+
+    // A background fetch should have started
+    const gameId = librarySvc.games()[0].id;
+    expect(librarySvc.fetchingMetadataIds().has(gameId)).toBe(true);
+
+    // Complete the background requests
+    httpMock.expectOne(r => r.url.includes('app-details'))
+      .flush({ '440': { success: true, data: { name: 'TF2', header_image: 'img.jpg' } } });
+    httpMock.expectOne(r => r.url.includes('reviews'))
+      .flush({ success: 1, query_summary: { total_positive: 90, total_reviews: 100, review_score: 8, review_score_desc: 'Very Positive' } });
+
+    // Should have been cleared
+    expect(librarySvc.fetchingMetadataIds().has(gameId)).toBe(false);
+  });
 });

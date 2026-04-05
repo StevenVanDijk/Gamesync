@@ -128,6 +128,8 @@ type ViewMode = 'card' | 'compact' | 'list';
               [game]="game"
               [compact]="viewMode() === 'compact'"
               [list]="viewMode() === 'list'"
+              [metadataLoading]="librarySvc.fetchingMetadataIds().has(game.id)"
+              [connectionColor]="connectionColorMap().get(game.storeId) ?? 'transparent'"
               (selected)="openGame($event)"
             />
           }
@@ -226,9 +228,27 @@ export class LibraryComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
 
+  private static readonly CONNECTION_COLORS = [
+    '#5c9cf5', // blue
+    '#e05c5c', // red
+    '#5cbe8a', // green
+    '#d4a84b', // amber
+    '#b05ce0', // purple
+    '#5cc4d4', // teal
+  ];
+
   searchQuery = signal('');
   sortKey = signal<'name' | 'hoursPlayed' | 'year' | 'score'>('name');
-  viewMode = signal<ViewMode>('card');
+  viewMode = signal<ViewMode>('list');
+
+  /** Stable colour per connection ID, assigned in arrival order. */
+  readonly connectionColorMap = computed(() => {
+    const map = new Map<string, string>();
+    this.connectionSvc.connections().forEach((c, i) => {
+      map.set(c.id, LibraryComponent.CONNECTION_COLORS[i % LibraryComponent.CONNECTION_COLORS.length]);
+    });
+    return map;
+  });
 
   filteredGames = computed(() => {
     const q = this.searchQuery().toLowerCase();

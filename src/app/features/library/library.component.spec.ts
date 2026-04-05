@@ -21,6 +21,7 @@ function makeLibrarySvc(games: Game[]) {
     syncing: signal(false),
     error: signal<string | null>(null),
     gameCount: signal(games.length),
+    fetchingMetadataIds: signal<ReadonlySet<string>>(new Set()),
     syncAll: vi.fn().mockReturnValue(of(games)),
     removeByConnection: vi.fn(),
     getById: vi.fn(),
@@ -107,6 +108,9 @@ describe('LibraryComponent (US-001)', () => {
 
   it('should apply compact-grid class when compact view is selected (US-014)', async () => {
     await createComponent([GAME_1, GAME_2], 1);
+    component.viewMode.set('card');
+    fixture.detectChanges();
+    await fixture.whenStable();
     const grid = fixture.nativeElement.querySelector('.game-grid') as HTMLElement;
     expect(grid.classList.contains('compact-grid')).toBe(false);
 
@@ -127,15 +131,9 @@ describe('LibraryComponent (US-001)', () => {
     expect(card.classList.contains('compact')).toBe(true);
   });
 
-  it('should apply list-grid class when list view is selected (US-016)', async () => {
+  it('should default to list view and apply list-grid class (US-016, US-018)', async () => {
     await createComponent([GAME_1, GAME_2], 1);
     const grid = fixture.nativeElement.querySelector('.game-grid') as HTMLElement;
-    expect(grid.classList.contains('list-grid')).toBe(false);
-
-    component.viewMode.set('list');
-    fixture.detectChanges();
-    await fixture.whenStable();
-
     expect(grid.classList.contains('list-grid')).toBe(true);
   });
 
