@@ -1,5 +1,5 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
-import { Observable, forkJoin, of, switchMap } from 'rxjs';
+import { Observable, EMPTY, forkJoin, of, switchMap } from 'rxjs';
 import { tap, catchError } from 'rxjs/operators';
 import { Game } from '../models/game.model';
 import {
@@ -58,6 +58,7 @@ export class GameLibraryService {
           );
           this._games.set(allGames);
           this._syncing.set(false);
+          this.backgroundFetchMetadata(allGames);
         },
         error: err => {
           const msg = err?.message ?? 'Sync failed';
@@ -83,6 +84,46 @@ export class GameLibraryService {
     this._games.update(games =>
       games.map(g => (g.id === gameId ? { ...g, metadata } : g)),
     );
+  }
+
+  /**
+   * For every Steam game in the list:
+   * 1. Batch-apply any already-cached metadata in a single signal update.
+   * 2. Queue background fetches for games whose metadata is not yet cached.
+   *    Failures are silently swallowed so they never affect the library view.
+   */
+  private backgroundFetchMetadata(games: Game[]): void {
+    const steamGames = games.filter(g => {
+      const conn = this.connectionSvc.getById(g.storeId);
+      return conn?.type === 'steam';
+    });
+    if (steamGames.length === 0) return;
+
+    // ── Pass 1: apply all cached metadata in one signal write ─────────────
+    const cacheHits = new Map(
+      steamGames
+        .map(g => [g.id, this.steamApi.getCachedMetadata(g.appId)] as const)
+        .filter((entry): entry is [string, NonNullable<ReturnType<typeof this.steamApi.getCachedMetadata>>] => entry[1] !== null),
+    );
+
+    if (cacheHits.size > 0) {
+      this.logger.info(TAG, `metadata cache: applying ${cacheHits.size} cached entries`);
+      this._games.update(gs =>
+        gs.map(g => (cacheHits.has(g.id) ? { ...g, metadata: cacheHits.get(g.id) } : g)),
+      );
+    }
+
+    // ── Pass 2: background-fetch for games not in cache ───────────────────
+    const uncached = steamGames.filter(g => !cacheHits.has(g.id));
+    if (uncached.length > 0) {
+      this.logger.info(TAG, `metadata background fetch: queuing ${uncached.length} game(s)`);
+    }
+    for (const game of uncached) {
+      this.steamApi
+        .getAppMetadata(game.appId)
+        .pipe(catchError(() => EMPTY))
+        .subscribe(metadata => this.updateGameMetadata(game.id, metadata));
+    }
   }
 
   private fetchForConnection(conn: StoreConnection): Observable<Game[]> {

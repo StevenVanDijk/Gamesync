@@ -64,6 +64,18 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
   });
 
   afterEach(() => {
+    // Drain any pending background metadata requests (app-details triggers reviews).
+    httpMock
+      .match(r => r.url.includes('app-details'))
+      .forEach(r => r.flush({}));
+    httpMock
+      .match(r => r.url.includes('reviews'))
+      .forEach(r =>
+        r.flush({
+          success: 1,
+          query_summary: { total_positive: 0, total_reviews: 0, review_score: 0, review_score_desc: '' },
+        }),
+      );
     httpMock.verify();
     localStorage.clear();
   });
@@ -144,6 +156,53 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
 
   it('should return undefined for an unknown game id', () => {
     expect(librarySvc.getById('nonexistent')).toBeUndefined();
+  });
+
+  it('should batch-apply cached metadata after sync (US-015)', async () => {
+    // Pre-populate metadata cache for TF2 (appId=440)
+    const cachedMeta = {
+      communityScore: 85,
+      imageUrl: 'https://cdn.steam.com/tf2.jpg',
+      yearPublished: 2007,
+      tags: ['Action'],
+      fetchedAt: Date.now(),
+    };
+    localStorage.setItem(
+      'gamesync_cache_steam_meta_440',
+      JSON.stringify({ data: cachedMeta, expiresAt: Date.now() + 86_400_000 }),
+    );
+
+    connectionSvc.add('steam', 'Steam', steamConfig);
+    const p = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
+    await p;
+
+    // Cached metadata should be applied immediately — no HTTP for app-details/reviews
+    httpMock.expectNone(r => r.url.includes('app-details'));
+    const game = librarySvc.games()[0];
+    expect(game.metadata?.communityScore).toBe(85);
+    expect(game.metadata?.imageUrl).toBe('https://cdn.steam.com/tf2.jpg');
+    expect(game.metadata?.yearPublished).toBe(2007);
+  });
+
+  it('should queue background metadata fetch for uncached Steam games (US-015)', async () => {
+    connectionSvc.add('steam', 'Steam', steamConfig);
+    const p = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
+    await p;
+
+    // A background app-details request should have been queued
+    const detailsReq = httpMock.expectOne(r => r.url.includes('app-details'));
+    expect(detailsReq.request.params.get('appids')).toBe('440');
+
+    // Flush it to prevent verify() failure (reviews also triggered)
+    detailsReq.flush({ '440': { success: true, data: { name: 'TF2', header_image: 'img.jpg' } } });
+    httpMock
+      .expectOne(r => r.url.includes('reviews'))
+      .flush({
+        success: 1,
+        query_summary: { total_positive: 90, total_reviews: 100, review_score: 8, review_score_desc: 'Very Positive' },
+      });
   });
 
   it('should emit empty array when no connections exist (US-001)', async () => {

@@ -122,6 +122,14 @@ export class SteamApiService {
   }
 
   /**
+   * Return cached metadata for a Steam app synchronously, or null if not cached.
+   * Does not trigger a network request.
+   */
+  getCachedMetadata(appId: string): GameMetadata | null {
+    return this.cache.get<GameMetadata>(`steam_meta_${appId}`);
+  }
+
+  /**
    * Fetch rich metadata for a single Steam app via the backend proxy.
    */
   getAppMetadata(appId: string): Observable<GameMetadata> {

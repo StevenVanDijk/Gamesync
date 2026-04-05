@@ -159,6 +159,20 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-015: Automatic metadata loading with caching
+**As a** user,
+**I want** game metadata (cover image, score, tags) to appear automatically in my library,
+**So that** I can browse visually without having to open each game individually.
+
+**Acceptance criteria:**
+- [ ] After a sync, any previously cached metadata is applied to game cards immediately
+- [ ] Steam games without cached metadata are fetched in the background automatically
+- [ ] Background fetches are paced through the rate limiter so Steam is not flooded
+- [ ] Metadata is stored in localStorage with a 24-hour TTL
+- [ ] Background fetch failures are silently ignored (do not affect the library view)
+
+---
+
 ### US-014: Compact grid view in library
 **As a** user on a mobile device,
 **I want** to switch to a compact grid layout in the library,
