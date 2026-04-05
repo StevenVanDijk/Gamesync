@@ -1,5 +1,5 @@
-// Vercel serverless entry point.
-// Vercel detects this file and serves it at /api/steam (and sub-paths via vercel.json rewrites).
-import app from '../backend/src/app';
+// Vercel serverless entry point for /api/steam/* routes.
+import { createApp } from './_create-app';
+import { steamRouter } from './_steam-routes';
 
-export default app;
+export default createApp('/api/steam', steamRouter);

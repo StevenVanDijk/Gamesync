@@ -12,10 +12,9 @@ const UPSTREAM_TIMEOUT_MS = 8_000;
 function forwardError(res: Response, err: unknown): void {
   if (axios.isAxiosError(err)) {
     if (err.response) {
-      // Upstream returned an HTTP error
       const status = err.response.status;
       const detail = typeof err.response.data === 'string'
-        ? err.response.data.slice(0, 200)   // trim HTML error pages
+        ? err.response.data.slice(0, 200)
         : JSON.stringify(err.response.data ?? {});
       console.error(`[Steam] upstream HTTP ${status}:`, detail);
       res.status(status).json({ error: err.response.statusText, detail });

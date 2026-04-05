@@ -1,4 +1,5 @@
-// Vercel serverless entry point for Epic API routes.
-import app from '../backend/src/app';
+// Vercel serverless entry point for /api/epic/* routes.
+import { createApp } from './_create-app';
+import { epicRouter } from './_epic-routes';
 
-export default app;
+export default createApp('/api/epic', epicRouter);

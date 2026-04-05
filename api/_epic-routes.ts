@@ -4,8 +4,7 @@
  * Environment variables required:
  *   EPIC_CLIENT_ID      – OAuth client ID from dev.epicgames.com
  *   EPIC_CLIENT_SECRET  – OAuth client secret
- *   EPIC_REDIRECT_URI   – Must match the registered redirect URI, e.g.
- *                         https://your-app.vercel.app/epic-callback
+ *   EPIC_REDIRECT_URI   – Must match the registered redirect URI
  */
 
 import { Router, Request, Response } from 'express';
@@ -52,10 +51,7 @@ function getClientCredentials(): { clientId: string; clientSecret: string; redir
   return { clientId, clientSecret, redirectUri };
 }
 
-/**
- * GET /api/epic/auth-url
- * Returns the Epic authorization URL the client should redirect the user to.
- */
+/** GET /api/epic/auth-url */
 epicRouter.get('/auth-url', (_req: Request, res: Response) => {
   try {
     const { clientId, redirectUri } = getClientCredentials();
@@ -66,11 +62,7 @@ epicRouter.get('/auth-url', (_req: Request, res: Response) => {
   }
 });
 
-/**
- * POST /api/epic/token
- * Exchanges an authorization code for tokens.
- * Body: { code: string }
- */
+/** POST /api/epic/token — exchanges an authorization code for tokens */
 epicRouter.post('/token', async (req: Request, res: Response) => {
   const { code } = req.body as { code?: string };
   if (!code) {
@@ -95,7 +87,6 @@ epicRouter.post('/token', async (req: Request, res: Response) => {
       timeout: UPSTREAM_TIMEOUT_MS,
     });
 
-    // Return only what the frontend needs
     res.json({
       accountId: data.account_id as string,
       displayName: data.displayName as string | undefined,
@@ -108,11 +99,7 @@ epicRouter.post('/token', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * POST /api/epic/refresh
- * Refreshes an access token using a refresh token.
- * Body: { refreshToken: string }
- */
+/** POST /api/epic/refresh — refreshes an access token */
 epicRouter.post('/refresh', async (req: Request, res: Response) => {
   const { refreshToken } = req.body as { refreshToken?: string };
   if (!refreshToken) {
@@ -146,11 +133,7 @@ epicRouter.post('/refresh', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/epic/library/:accountId
- * Returns the list of owned games for an Epic account.
- * Query: accessToken=<token>
- */
+/** GET /api/epic/library/:accountId — returns owned games */
 epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
   const { accountId } = req.params;
   const { accessToken } = req.query as { accessToken?: string };
@@ -184,7 +167,6 @@ epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
       return;
     }
 
-    // Batch catalog lookups by namespace
     const byNamespace = new Map<string, string[]>();
     for (const e of active) {
       if (!byNamespace.has(e.namespace)) byNamespace.set(e.namespace, []);
@@ -210,7 +192,7 @@ epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
             catalogMap.set(id, item);
           }
         } catch {
-          // catalog lookup failure is non-fatal; games fall back to entitlementName
+          // catalog lookup failure is non-fatal
         }
       }),
     );

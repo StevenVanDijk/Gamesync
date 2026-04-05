@@ -2,8 +2,8 @@ import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { steamRouter } from './routes/steam';
-import { epicRouter } from './routes/epic';
+import { steamRouter } from '../../api/_steam-routes';
+import { epicRouter } from '../../api/_epic-routes';
 
 const app = express();
 
