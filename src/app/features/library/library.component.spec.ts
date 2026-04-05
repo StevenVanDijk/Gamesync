@@ -104,4 +104,26 @@ describe('LibraryComponent (US-001)', () => {
     const countEl = fixture.nativeElement.querySelector('.game-count') as HTMLElement;
     expect(countEl.textContent?.trim()).toBe('1 game');
   });
+
+  it('should apply compact-grid class when compact view is selected (US-014)', async () => {
+    await createComponent([GAME_1, GAME_2], 1);
+    const grid = fixture.nativeElement.querySelector('.game-grid') as HTMLElement;
+    expect(grid.classList.contains('compact-grid')).toBe(false);
+
+    component.viewMode.set('compact');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(grid.classList.contains('compact-grid')).toBe(true);
+  });
+
+  it('should pass compact=true to game cards in compact view (US-014)', async () => {
+    await createComponent([GAME_1], 1);
+    component.viewMode.set('compact');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const card = fixture.nativeElement.querySelector('app-game-card mat-card') as HTMLElement;
+    expect(card.classList.contains('compact')).toBe(true);
+  });
 });

@@ -157,6 +157,20 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-014: Compact grid view in library
+**As a** user on a mobile device,
+**I want** to switch to a compact grid layout in the library,
+**So that** I can browse many games at once without large empty image placeholders dominating the screen.
+
+**Acceptance criteria:**
+- [ ] A toggle button in the library header switches between "card" view and "compact" view
+- [ ] Compact view shows 3 columns on mobile and more on wider screens
+- [ ] Compact cards have a smaller image area and omit tags and year
+- [ ] Card view remains the default
+- [ ] The toggle is visible on mobile without breaking the header layout
+
+---
+
 ### US-009: Successful build required
 **As a** developer,
 **I want** every change to produce a passing production build,

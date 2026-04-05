@@ -11,7 +11,7 @@ import { Game } from '../../../core/models/game.model';
   standalone: true,
   imports: [CommonModule, MatCardModule, MatChipsModule, MatIconModule, MatTooltipModule],
   template: `
-    <mat-card class="game-card" (click)="selected.emit(game())">
+    <mat-card class="game-card" [class.compact]="compact()" (click)="selected.emit(game())">
       <div class="card-image-wrapper">
         @if (game().metadata?.imageUrl) {
           <img
@@ -42,15 +42,17 @@ import { Game } from '../../../core/models/game.model';
           <mat-icon class="inline-icon">schedule</mat-icon>
           {{ game().hoursPlayed | number:'1.0-1' }} hrs
         </p>
-        @if (game().metadata?.yearPublished) {
-          <p class="year">{{ game().metadata?.yearPublished }}</p>
-        }
-        @if (game().metadata?.tags?.length) {
-          <div class="tags">
-            @for (tag of (game().metadata?.tags ?? []).slice(0, 3); track tag) {
-              <mat-chip class="tag-chip">{{ tag }}</mat-chip>
-            }
-          </div>
+        @if (!compact()) {
+          @if (game().metadata?.yearPublished) {
+            <p class="year">{{ game().metadata?.yearPublished }}</p>
+          }
+          @if (game().metadata?.tags?.length) {
+            <div class="tags">
+              @for (tag of (game().metadata?.tags ?? []).slice(0, 3); track tag) {
+                <mat-chip class="tag-chip">{{ tag }}</mat-chip>
+              }
+            </div>
+          }
         }
       </mat-card-content>
     </mat-card>
@@ -67,6 +69,8 @@ import { Game } from '../../../core/models/game.model';
       transform: translateY(-3px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.3);
     }
+
+    /* ── Card (default) image area ── */
     .card-image-wrapper {
       position: relative;
       width: 100%;
@@ -74,6 +78,11 @@ import { Game } from '../../../core/models/game.model';
       overflow: hidden;
       background: #1a1a2e;
     }
+    .compact .card-image-wrapper {
+      aspect-ratio: unset;
+      height: 64px;
+    }
+
     .card-image {
       width: 100%;
       height: 100%;
@@ -93,20 +102,29 @@ import { Game } from '../../../core/models/game.model';
       width: 48px;
       height: 48px;
     }
+    .compact .card-image-placeholder mat-icon {
+      font-size: 28px;
+      width: 28px;
+      height: 28px;
+    }
+
     .score-badge {
       position: absolute;
-      bottom: 6px;
-      right: 6px;
-      padding: 2px 6px;
+      bottom: 4px;
+      right: 4px;
+      padding: 1px 4px;
       border-radius: 4px;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 700;
       color: #fff;
     }
     .score-positive { background: #4caf50; }
     .score-mixed    { background: #ff9800; }
     .score-negative { background: #f44336; }
-    mat-card-content { padding-top: 8px; flex: 1; }
+
+    mat-card-content { padding-top: 6px; flex: 1; }
+    .compact mat-card-content { padding: 4px 8px 6px; }
+
     .game-title {
       margin: 0 0 4px;
       font-size: 14px;
@@ -115,6 +133,11 @@ import { Game } from '../../../core/models/game.model';
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .compact .game-title {
+      font-size: 12px;
+      margin-bottom: 2px;
+    }
+
     .hours-played {
       margin: 0 0 2px;
       font-size: 12px;
@@ -123,6 +146,8 @@ import { Game } from '../../../core/models/game.model';
       gap: 2px;
       color: #aaa;
     }
+    .compact .hours-played { font-size: 11px; }
+
     .year {
       margin: 0 0 4px;
       font-size: 11px;
@@ -150,4 +175,5 @@ import { Game } from '../../../core/models/game.model';
 export class GameCardComponent {
   game = input.required<Game>();
   selected = output<Game>();
+  compact = input(false);
 }

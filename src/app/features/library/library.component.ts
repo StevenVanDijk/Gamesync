@@ -10,10 +10,13 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { GameLibraryService } from '../../core/services/game-library.service';
 import { StoreConnectionService } from '../../core/services/store-connection.service';
 import { GameCardComponent } from '../../shared/components/game-card/game-card.component';
 import { Game } from '../../core/models/game.model';
+
+type ViewMode = 'card' | 'compact';
 
 @Component({
   selector: 'app-library',
@@ -29,6 +32,7 @@ import { Game } from '../../core/models/game.model';
     MatProgressSpinnerModule,
     MatSelectModule,
     MatSnackBarModule,
+    MatTooltipModule,
     GameCardComponent,
   ],
   template: `
@@ -51,10 +55,33 @@ import { Game } from '../../core/models/game.model';
             </mat-select>
           </mat-form-field>
 
-          <button mat-flat-button color="primary" class="sync-btn" (click)="sync()" [disabled]="librarySvc.syncing()">
-            <mat-icon>sync</mat-icon>
-            Sync
-          </button>
+          <div class="action-row">
+            <button mat-flat-button color="primary" class="sync-btn" (click)="sync()" [disabled]="librarySvc.syncing()">
+              <mat-icon>sync</mat-icon>
+              Sync
+            </button>
+
+            <div class="view-toggle">
+              <button
+                mat-icon-button
+                [class.active]="viewMode() === 'card'"
+                (click)="viewMode.set('card')"
+                matTooltip="Card view"
+                aria-label="Card view"
+              >
+                <mat-icon>view_module</mat-icon>
+              </button>
+              <button
+                mat-icon-button
+                [class.active]="viewMode() === 'compact'"
+                (click)="viewMode.set('compact')"
+                matTooltip="Compact view"
+                aria-label="Compact view"
+              >
+                <mat-icon>grid_view</mat-icon>
+              </button>
+            </div>
+          </div>
         </div>
 
         <p class="game-count">{{ filteredGames().length }} game{{ filteredGames().length === 1 ? '' : 's' }}</p>
@@ -84,9 +111,9 @@ import { Game } from '../../core/models/game.model';
           <p>No games match your search.</p>
         </div>
       } @else {
-        <div class="game-grid">
+        <div class="game-grid" [class.compact-grid]="viewMode() === 'compact'">
           @for (game of filteredGames(); track game.id) {
-            <app-game-card [game]="game" (selected)="openGame($event)" />
+            <app-game-card [game]="game" [compact]="viewMode() === 'compact'" (selected)="openGame($event)" />
           }
         </div>
       }
@@ -103,13 +130,40 @@ import { Game } from '../../core/models/game.model';
     }
     .search-field { flex: 1; min-width: 140px; }
     .sort-field { width: 140px; }
-    .sync-btn { margin-top: 4px; flex-shrink: 0; }
+
+    .action-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    .sync-btn { flex-shrink: 0; }
+
+    .view-toggle {
+      display: flex;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .view-toggle button { border-radius: 0; }
+    .view-toggle button.active {
+      background: rgba(255,255,255,0.12);
+      color: white;
+    }
+
     .game-count { margin: 0 0 8px; font-size: 13px; color: #aaa; }
+
     .game-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
       gap: 12px;
     }
+    .compact-grid {
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 6px;
+    }
+
     .loading-state, .empty-state {
       display: flex;
       flex-direction: column;
@@ -125,8 +179,10 @@ import { Game } from '../../core/models/game.model';
       .library-container { padding: 8px; }
       .search-bar { flex-direction: column; align-items: stretch; }
       .search-field, .sort-field { width: 100%; min-width: 0; }
-      .sync-btn { width: 100%; }
+      .action-row { justify-content: space-between; }
+      .sync-btn { flex: 1; }
       .game-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .compact-grid { grid-template-columns: repeat(3, 1fr); gap: 5px; }
     }
   `],
 })
@@ -138,6 +194,7 @@ export class LibraryComponent implements OnInit {
 
   searchQuery = signal('');
   sortKey = signal<'name' | 'hoursPlayed' | 'year' | 'score'>('name');
+  viewMode = signal<ViewMode>('card');
 
   filteredGames = computed(() => {
     const q = this.searchQuery().toLowerCase();
