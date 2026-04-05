@@ -126,4 +126,26 @@ describe('LibraryComponent (US-001)', () => {
     const card = fixture.nativeElement.querySelector('app-game-card mat-card') as HTMLElement;
     expect(card.classList.contains('compact')).toBe(true);
   });
+
+  it('should apply list-grid class when list view is selected (US-016)', async () => {
+    await createComponent([GAME_1, GAME_2], 1);
+    const grid = fixture.nativeElement.querySelector('.game-grid') as HTMLElement;
+    expect(grid.classList.contains('list-grid')).toBe(false);
+
+    component.viewMode.set('list');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(grid.classList.contains('list-grid')).toBe(true);
+  });
+
+  it('should pass list=true to game cards in list view (US-016)', async () => {
+    await createComponent([GAME_1], 1);
+    component.viewMode.set('list');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const card = fixture.nativeElement.querySelector('app-game-card mat-card') as HTMLElement;
+    expect(card.classList.contains('list')).toBe(true);
+  });
 });

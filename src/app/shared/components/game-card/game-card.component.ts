@@ -11,50 +11,71 @@ import { Game } from '../../../core/models/game.model';
   standalone: true,
   imports: [CommonModule, MatCardModule, MatChipsModule, MatIconModule, MatTooltipModule],
   template: `
-    <mat-card class="game-card" [class.compact]="compact()" (click)="selected.emit(game())">
-      <div class="card-image-wrapper">
-        @if (game().metadata?.imageUrl) {
-          <img
-            [src]="game().metadata?.imageUrl"
-            [alt]="game().name"
-            class="card-image"
-          />
-        } @else {
-          <div class="card-image-placeholder">
-            <mat-icon>sports_esports</mat-icon>
+    <mat-card
+      class="game-card"
+      [class.compact]="compact()"
+      [class.list]="list()"
+      (click)="selected.emit(game())"
+    >
+      @if (list()) {
+        <!-- ── List row ── -->
+        <div class="list-row">
+          <div class="list-thumb">
+            @if (game().metadata?.imageUrl) {
+              <img [src]="game().metadata?.imageUrl" [alt]="game().name" class="list-img" />
+            } @else {
+              <mat-icon class="list-ph-icon">sports_esports</mat-icon>
+            }
           </div>
-        }
-        @if (game().metadata?.communityScore !== undefined) {
-          <span
-            class="score-badge"
-            [class.score-positive]="(game().metadata?.communityScore ?? 0) >= 70"
-            [class.score-mixed]="(game().metadata?.communityScore ?? 0) >= 40 && (game().metadata?.communityScore ?? 0) < 70"
-            [class.score-negative]="(game().metadata?.communityScore ?? 0) < 40"
-            [matTooltip]="'Community score: ' + (game().metadata?.communityScore ?? 0) + '%'"
-          >
-            {{ game().metadata?.communityScore }}%
-          </span>
-        }
-      </div>
-      <mat-card-content>
-        <h3 class="game-title" [title]="game().name">{{ game().name }}</h3>
-        <p class="hours-played">
-          <mat-icon class="inline-icon">schedule</mat-icon>
-          {{ game().hoursPlayed | number:'1.0-1' }} hrs
-        </p>
-        @if (!compact()) {
-          @if (game().metadata?.yearPublished) {
-            <p class="year">{{ game().metadata?.yearPublished }}</p>
-          }
-          @if (game().metadata?.tags?.length) {
-            <div class="tags">
-              @for (tag of (game().metadata?.tags ?? []).slice(0, 3); track tag) {
-                <mat-chip class="tag-chip">{{ tag }}</mat-chip>
-              }
+          <span class="list-name" [title]="game().name">{{ game().name }}</span>
+          <span class="list-hours">{{ game().hoursPlayed | number:'1.0-1' }}&thinsp;h</span>
+        </div>
+      } @else {
+        <!-- ── Card / compact card ── -->
+        <div class="card-image-wrapper">
+          @if (game().metadata?.imageUrl) {
+            <img
+              [src]="game().metadata?.imageUrl"
+              [alt]="game().name"
+              class="card-image"
+            />
+          } @else {
+            <div class="card-image-placeholder">
+              <mat-icon>sports_esports</mat-icon>
             </div>
           }
-        }
-      </mat-card-content>
+          @if (game().metadata?.communityScore !== undefined) {
+            <span
+              class="score-badge"
+              [class.score-positive]="(game().metadata?.communityScore ?? 0) >= 70"
+              [class.score-mixed]="(game().metadata?.communityScore ?? 0) >= 40 && (game().metadata?.communityScore ?? 0) < 70"
+              [class.score-negative]="(game().metadata?.communityScore ?? 0) < 40"
+              [matTooltip]="'Community score: ' + (game().metadata?.communityScore ?? 0) + '%'"
+            >
+              {{ game().metadata?.communityScore }}%
+            </span>
+          }
+        </div>
+        <mat-card-content>
+          <h3 class="game-title" [title]="game().name">{{ game().name }}</h3>
+          <p class="hours-played">
+            <mat-icon class="inline-icon">schedule</mat-icon>
+            {{ game().hoursPlayed | number:'1.0-1' }} hrs
+          </p>
+          @if (!compact()) {
+            @if (game().metadata?.yearPublished) {
+              <p class="year">{{ game().metadata?.yearPublished }}</p>
+            }
+            @if (game().metadata?.tags?.length) {
+              <div class="tags">
+                @for (tag of (game().metadata?.tags ?? []).slice(0, 3); track tag) {
+                  <mat-chip class="tag-chip">{{ tag }}</mat-chip>
+                }
+              </div>
+            }
+          }
+        </mat-card-content>
+      }
     </mat-card>
   `,
   styles: [`
@@ -64,10 +85,67 @@ import { Game } from '../../../core/models/game.model';
       height: 100%;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
     .game-card:hover {
       transform: translateY(-3px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+
+    /* ── List row ── */
+    .game-card.list {
+      height: auto;
+      flex-direction: row;
+      transform: none !important;
+      border-radius: 4px;
+    }
+    .game-card.list:hover {
+      background: rgba(255,255,255,0.06);
+      box-shadow: none;
+    }
+    .list-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 5px 10px;
+      width: 100%;
+      min-width: 0;
+    }
+    .list-thumb {
+      width: 44px;
+      height: 28px;
+      flex-shrink: 0;
+      border-radius: 3px;
+      overflow: hidden;
+      background: #1a1a2e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .list-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .list-ph-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+      color: #555;
+    }
+    .list-name {
+      flex: 1;
+      min-width: 0;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .list-hours {
+      font-size: 12px;
+      color: #888;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
 
     /* ── Card (default) image area ── */
@@ -176,4 +254,5 @@ export class GameCardComponent {
   game = input.required<Game>();
   selected = output<Game>();
   compact = input(false);
+  list = input(false);
 }

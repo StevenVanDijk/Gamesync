@@ -16,7 +16,7 @@ import { StoreConnectionService } from '../../core/services/store-connection.ser
 import { GameCardComponent } from '../../shared/components/game-card/game-card.component';
 import { Game } from '../../core/models/game.model';
 
-type ViewMode = 'card' | 'compact';
+type ViewMode = 'card' | 'compact' | 'list';
 
 @Component({
   selector: 'app-library',
@@ -80,6 +80,15 @@ type ViewMode = 'card' | 'compact';
               >
                 <mat-icon>grid_view</mat-icon>
               </button>
+              <button
+                mat-icon-button
+                [class.active]="viewMode() === 'list'"
+                (click)="viewMode.set('list')"
+                matTooltip="List view"
+                aria-label="List view"
+              >
+                <mat-icon>view_list</mat-icon>
+              </button>
             </div>
           </div>
         </div>
@@ -111,25 +120,39 @@ type ViewMode = 'card' | 'compact';
           <p>No games match your search.</p>
         </div>
       } @else {
-        <div class="game-grid" [class.compact-grid]="viewMode() === 'compact'">
+        <div class="game-grid"
+             [class.compact-grid]="viewMode() === 'compact'"
+             [class.list-grid]="viewMode() === 'list'">
           @for (game of filteredGames(); track game.id) {
-            <app-game-card [game]="game" [compact]="viewMode() === 'compact'" (selected)="openGame($event)" />
+            <app-game-card
+              [game]="game"
+              [compact]="viewMode() === 'compact'"
+              [list]="viewMode() === 'list'"
+              (selected)="openGame($event)"
+            />
           }
         </div>
       }
     </div>
   `,
   styles: [`
-    .library-container { padding: 12px; max-width: 1400px; margin: 0 auto; }
+    .library-container {
+      padding: 12px;
+      max-width: 1400px;
+      margin: 0 auto;
+      overflow-x: hidden;
+    }
     .library-header { margin-bottom: 12px; }
     .search-bar {
       display: flex;
       align-items: flex-start;
       gap: 8px;
       flex-wrap: wrap;
+      /* prevent form fields from overflowing the container */
+      min-width: 0;
     }
-    .search-field { flex: 1; min-width: 140px; }
-    .sort-field { width: 140px; }
+    .search-field { flex: 1; min-width: 120px; max-width: 100%; }
+    .sort-field { width: 130px; max-width: 100%; }
 
     .action-row {
       display: flex;
@@ -154,6 +177,7 @@ type ViewMode = 'card' | 'compact';
 
     .game-count { margin: 0 0 8px; font-size: 13px; color: #aaa; }
 
+    /* ── Grid views ── */
     .game-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -162,6 +186,15 @@ type ViewMode = 'card' | 'compact';
     .compact-grid {
       grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
       gap: 6px;
+    }
+
+    /* ── List view ── */
+    .list-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      /* override grid-template-columns from .game-grid */
+      grid-template-columns: none;
     }
 
     .loading-state, .empty-state {
@@ -183,6 +216,7 @@ type ViewMode = 'card' | 'compact';
       .sync-btn { flex: 1; }
       .game-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
       .compact-grid { grid-template-columns: repeat(3, 1fr); gap: 5px; }
+      .list-grid { gap: 1px; }
     }
   `],
 })

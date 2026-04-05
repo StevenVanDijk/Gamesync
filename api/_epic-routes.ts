@@ -217,21 +217,26 @@ epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
     await Promise.all(
       Array.from(byNamespace.entries()).map(async ([ns, ids]) => {
         try {
-          const { data } = await axios.get(`${EPIC_CATALOG_BASE}/${ns}/bulk/items`, {
-            headers: { Authorization: authHeader },
-            params: {
-              id: ids.join(','),
-              country: 'US',
-              locale: 'en-US',
-              includeMainGameDetails: 'true',
-            },
-            timeout: UPSTREAM_TIMEOUT_MS,
-          });
+          // Epic API requires a separate id= param per item, not comma-joined.
+          const qs = new URLSearchParams();
+          ids.forEach(id => qs.append('id', id));
+          qs.set('country', 'US');
+          qs.set('locale', 'en-US');
+          qs.set('includeMainGameDetails', 'true');
+
+          const { data } = await axios.get(
+            `${EPIC_CATALOG_BASE}/${ns}/bulk/items?${qs.toString()}`,
+            { headers: { Authorization: authHeader }, timeout: UPSTREAM_TIMEOUT_MS },
+          );
           for (const [id, item] of Object.entries(data as Record<string, CatalogItem>)) {
             catalogMap.set(id, item);
           }
-        } catch {
+        } catch (err) {
           // catalog failure is non-fatal; games fall back to appName
+          const detail = axios.isAxiosError(err)
+            ? `HTTP ${err.response?.status ?? '?'}: ${JSON.stringify(err.response?.data ?? {}).slice(0, 120)}`
+            : String(err);
+          console.error(`[Epic] catalog lookup failed (ns=${ns}):`, detail);
         }
       }),
     );

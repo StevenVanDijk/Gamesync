@@ -159,6 +159,19 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-016: List view for game library
+**As a** user,
+**I want** a list view option in the library that shows one game per row,
+**So that** I can scan many titles quickly without visual noise from images.
+
+**Acceptance criteria:**
+- [ ] A third toggle button adds "list" mode alongside card and compact
+- [ ] List rows show a small thumbnail, game title, and hours played
+- [ ] Rows are space-efficient (≈ 40 px tall)
+- [ ] List view works on both mobile and desktop
+
+---
+
 ### US-015: Automatic metadata loading with caching
 **As a** user,
 **I want** game metadata (cover image, score, tags) to appear automatically in my library,
