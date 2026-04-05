@@ -6,6 +6,13 @@ import rateLimit from 'express-rate-limit';
 export function createApp(prefix: string, router: Router) {
   const app = express();
 
+  // Disable Express's automatic ETag generation.
+  // The proxy always returns a fresh body from upstream; ETags would cause the
+  // browser to receive 304 with no body on subsequent requests, which breaks
+  // the metadata parsing in the Angular app.  App-level caching is handled by
+  // the client's localStorage CacheService instead.
+  app.set('etag', false);
+
   app.use(helmet());
   app.use(cors());
   app.use(express.json());
