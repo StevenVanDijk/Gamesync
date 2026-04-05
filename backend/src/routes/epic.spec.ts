@@ -247,7 +247,7 @@ describe('GET /api/epic/library/:accountId (US-012)', () => {
     expect(res.body.games).toHaveLength(0);
   });
 
-  it('should fall back to appName when catalog lookup fails', async () => {
+  it('should drop items when catalog lookup fails (no UUID fallback)', async () => {
     mockGet.mockResolvedValueOnce({
       data: {
         records: [
@@ -263,6 +263,33 @@ describe('GET /api/epic/library/:accountId (US-012)', () => {
       .query({ accessToken: 'valid_token' });
 
     expect(res.status).toBe(200);
-    expect(res.body.games[0].name).toBe('my-game');
+    expect(res.body.games).toHaveLength(0);
+  });
+
+  it('should drop items whose catalog entry has no title (UUID-only records)', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: {
+        records: [
+          { appName: 'b2d025b9212d4388ba2e3e5f1e8fc579', catalogItemId: 'c1', '@namespace': 'ns1', sandboxType: 'PUBLIC' },
+          { appName: 'RealGame', catalogItemId: 'c2', '@namespace': 'ns1', sandboxType: 'PUBLIC' },
+        ],
+        responseMetadata: { nextCursor: null },
+      },
+    });
+    mockGet.mockResolvedValueOnce({
+      data: {
+        // c1 has no title; c2 has a proper title
+        c1: { id: 'c1', categories: [{ path: 'games' }] },
+        c2: { id: 'c2', title: 'Real Game', categories: [{ path: 'games' }] },
+      },
+    });
+
+    const res = await request(app)
+      .get('/api/epic/library/acc123')
+      .query({ accessToken: 'valid_token' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.games).toHaveLength(1);
+    expect(res.body.games[0].name).toBe('Real Game');
   });
 });

@@ -241,23 +241,25 @@ epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
       }),
     );
 
-    // ── Build final game list, excluding plugins / digital extras ─────────
+    // ── Build final game list, excluding plugins / digital extras / unresolved items ──
     const games = filtered
       .filter(r => {
         const catalog = catalogMap.get(r.catalogItemId);
-        if (!catalog) return true;
+        // Drop items with no catalog title — they are DLC stubs, engine assets,
+        // or internal records whose appName is a raw UUID with no display name.
+        if (!catalog?.title) return false;
         const categories = catalog.categories?.map(c => c.path.toLowerCase()) ?? [];
         return !categories.some(c => c.includes('plugins') || c.includes('digitalextras'));
       })
       .map(r => {
-        const catalog = catalogMap.get(r.catalogItemId);
-        const headerImage = catalog?.keyImages?.find(
+        const catalog = catalogMap.get(r.catalogItemId)!;
+        const headerImage = catalog.keyImages?.find(
           img => img.type === 'DieselStoreFrontWide' || img.type === 'OfferImageWide',
         )?.url;
 
         return {
           appId: r.appName,
-          name: catalog?.title ?? r.appName,
+          name: catalog.title,
           hoursPlayed: 0,
           imageUrl: headerImage,
         };
