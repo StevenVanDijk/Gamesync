@@ -136,9 +136,11 @@ This file contains user stories for the Gamesync project. Every change must be r
 **So that** I don't have to manually export and paste JSON.
 
 **Acceptance criteria:**
-- [ ] User can initiate OAuth login with Epic from the connections dialog
-- [ ] The backend handles the OAuth callback and exchanges the code for tokens
-- [ ] Owned games are fetched from the Epic entitlements API and displayed in the library
+- [ ] User can click "Open Epic Login" in the connections dialog to sign in with Epic
+- [ ] After signing in, the user copies the authorizationCode from Epic's redirect page and pastes it into the dialog
+- [ ] The backend exchanges the code using Epic Launcher's public OAuth client (no developer app registration required)
+- [ ] Owned games are fetched from Epic's library service and displayed in the library
+- [ ] Unreal Engine assets, private sandbox items, and plugins/extras are filtered out
 - [ ] Since Epic provides no playtime data, hours played is shown as 0
 - [ ] The connection stores the Epic account ID (not raw credentials)
 

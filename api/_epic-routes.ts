@@ -1,10 +1,15 @@
 /**
  * Epic Games API proxy routes.
  *
- * Environment variables required:
- *   EPIC_CLIENT_ID      – OAuth client ID from dev.epicgames.com
- *   EPIC_CLIENT_SECRET  – OAuth client secret
- *   EPIC_REDIRECT_URI   – Must match the registered redirect URI
+ * Uses Epic's public launcher OAuth client — no developer app registration required.
+ * The same credentials are used by Playnite, Legendary, and other open-source clients.
+ *
+ * Auth flow:
+ *   1. Frontend opens https://www.epicgames.com/id/login?redirectUrl=<redirect-api-url>
+ *   2. After login, user lands on the Epic redirect page showing JSON with authorizationCode
+ *   3. User copies that code and POSTs it to /api/epic/token
+ *   4. Backend exchanges code for access + refresh tokens
+ *   5. Subsequent library fetches use GET /api/epic/library/:accountId?accessToken=...
  */
 
 import { Router, Request, Response } from 'express';
@@ -12,10 +17,19 @@ import axios from 'axios';
 
 export const epicRouter = Router();
 
-const EPIC_TOKEN_URL = 'https://api.epicgames.dev/epic/oauth/v1/token';
-const EPIC_ENTITLEMENTS_BASE = 'https://api.epicgames.dev/epic/ecom/v1/identities';
-const EPIC_CATALOG_URL = 'https://api.epicgames.dev/epic/ecom/v1/catalog/items';
-const EPIC_AUTH_BASE = 'https://www.epicgames.com/id/api/redirect';
+// Public Epic Launcher OAuth client credentials.
+// These are the same credentials used by the Epic Games Launcher itself and are
+// widely documented in open-source projects (Playnite, Legendary, etc.).
+const EPIC_CLIENT_ID = '34a02cf8f4414e29b15921876da36f9a';
+const EPIC_BASIC_AUTH =
+  'MzRhMDJjZjhmNDQxNGUyOWIxNTkyMTg3NmRhMzZmOWE6ZGFhZmJjY2M3Mzc3NDUwMzlkZmZlNTNkOTRmYzc2Y2Y=';
+
+const EPIC_TOKEN_URL =
+  'https://account-public-service-prod03.ol.epicgames.com/account/api/oauth/token';
+const EPIC_LIBRARY_URL =
+  'https://library-service.live.use1a.on.epicgames.com/library/api/public/items';
+const EPIC_CATALOG_BASE =
+  'https://catalog-public-service-prod06.ol.epicgames.com/catalog/api/shared/namespace';
 
 const UPSTREAM_TIMEOUT_MS = 8_000;
 
@@ -23,9 +37,10 @@ function forwardError(res: Response, err: unknown): void {
   if (axios.isAxiosError(err)) {
     if (err.response) {
       const status = err.response.status;
-      const detail = typeof err.response.data === 'string'
-        ? err.response.data.slice(0, 200)
-        : JSON.stringify(err.response.data ?? {});
+      const detail =
+        typeof err.response.data === 'string'
+          ? err.response.data.slice(0, 200)
+          : JSON.stringify(err.response.data ?? {});
       console.error(`[Epic] upstream HTTP ${status}:`, detail);
       res.status(status).json({ error: err.response.statusText, detail });
     } else if (err.code === 'ECONNABORTED' || err.code === 'ERR_CANCELED') {
@@ -41,47 +56,42 @@ function forwardError(res: Response, err: unknown): void {
   }
 }
 
-function getClientCredentials(): { clientId: string; clientSecret: string; redirectUri: string } {
-  const clientId = process.env['EPIC_CLIENT_ID'];
-  const clientSecret = process.env['EPIC_CLIENT_SECRET'];
-  const redirectUri = process.env['EPIC_REDIRECT_URI'];
-  if (!clientId || !clientSecret || !redirectUri) {
-    throw new Error('EPIC_CLIENT_ID, EPIC_CLIENT_SECRET, and EPIC_REDIRECT_URI must be set');
-  }
-  return { clientId, clientSecret, redirectUri };
-}
-
-/** GET /api/epic/auth-url */
+/**
+ * GET /api/epic/auth-url
+ * Returns the URL the user should open to log in with Epic.
+ * After logging in they will see a JSON page containing "authorizationCode".
+ */
 epicRouter.get('/auth-url', (_req: Request, res: Response) => {
-  try {
-    const { clientId, redirectUri } = getClientCredentials();
-    const url = `${EPIC_AUTH_BASE}?clientId=${encodeURIComponent(clientId)}&redirectUri=${encodeURIComponent(redirectUri)}&responseType=code`;
-    res.json({ url });
-  } catch (err) {
-    res.status(503).json({ error: (err as Error).message });
-  }
+  const redirectApiUrl =
+    `https://www.epicgames.com/id/api/redirect` +
+    `?clientId=${EPIC_CLIENT_ID}&responseType=code`;
+  const loginUrl =
+    `https://www.epicgames.com/id/login?redirectUrl=${encodeURIComponent(redirectApiUrl)}`;
+  res.json({ url: loginUrl });
 });
 
-/** POST /api/epic/token — exchanges an authorization code for tokens */
+/**
+ * POST /api/epic/token
+ * Exchanges an authorization code for access + refresh tokens.
+ * Body: { code: string }
+ */
 epicRouter.post('/token', async (req: Request, res: Response) => {
   const { code } = req.body as { code?: string };
   if (!code) {
     res.status(400).json({ error: 'code is required' });
     return;
   }
-  try {
-    const { clientId, clientSecret, redirectUri } = getClientCredentials();
-    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
+  try {
     const params = new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: redirectUri,
+      token_type: 'eg1',
     });
 
     const { data } = await axios.post(EPIC_TOKEN_URL, params.toString(), {
       headers: {
-        Authorization: `Basic ${basicAuth}`,
+        Authorization: `basic ${EPIC_BASIC_AUTH}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       timeout: UPSTREAM_TIMEOUT_MS,
@@ -99,25 +109,28 @@ epicRouter.post('/token', async (req: Request, res: Response) => {
   }
 });
 
-/** POST /api/epic/refresh — refreshes an access token */
+/**
+ * POST /api/epic/refresh
+ * Refreshes an access token using a refresh token.
+ * Body: { refreshToken: string }
+ */
 epicRouter.post('/refresh', async (req: Request, res: Response) => {
   const { refreshToken } = req.body as { refreshToken?: string };
   if (!refreshToken) {
     res.status(400).json({ error: 'refreshToken is required' });
     return;
   }
-  try {
-    const { clientId, clientSecret } = getClientCredentials();
-    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
+  try {
     const params = new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
+      token_type: 'eg1',
     });
 
     const { data } = await axios.post(EPIC_TOKEN_URL, params.toString(), {
       headers: {
-        Authorization: `Basic ${basicAuth}`,
+        Authorization: `basic ${EPIC_BASIC_AUTH}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       timeout: UPSTREAM_TIMEOUT_MS,
@@ -133,9 +146,12 @@ epicRouter.post('/refresh', async (req: Request, res: Response) => {
   }
 });
 
-/** GET /api/epic/library/:accountId — returns owned games */
+/**
+ * GET /api/epic/library/:accountId
+ * Returns the list of owned games for an Epic account.
+ * Query: accessToken=<token>
+ */
 epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
-  const { accountId } = req.params;
   const { accessToken } = req.query as { accessToken?: string };
 
   if (!accessToken) {
@@ -143,39 +159,56 @@ epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
     return;
   }
 
-  try {
-    const { data } = await axios.get(`${EPIC_ENTITLEMENTS_BASE}/${accountId}/entitlements`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      params: { start: 0, count: 1000, entitlementType: 'EXECUTABLE' },
-      timeout: UPSTREAM_TIMEOUT_MS,
-    });
+  const authHeader = `Bearer ${accessToken}`;
 
-    interface Entitlement {
-      id: string;
-      entitlementName: string;
-      namespace: string;
+  try {
+    // ── Fetch all library records (paginated) ──────────────────────────────
+    interface LibraryRecord {
+      appName: string;
       catalogItemId: string;
-      status: string;
-      active: boolean;
+      '@namespace': string;
+      sandboxType: string;
     }
 
-    const elements: Entitlement[] = (data as { elements: Entitlement[] }).elements ?? [];
-    const active = elements.filter(e => e.active && e.status === 'ACTIVE');
+    const records: LibraryRecord[] = [];
+    let cursor: string | undefined;
 
-    if (active.length === 0) {
+    do {
+      const params: Record<string, string> = { includeMetadata: 'true' };
+      if (cursor) params['cursor'] = cursor;
+
+      const { data } = await axios.get(EPIC_LIBRARY_URL, {
+        headers: { Authorization: authHeader },
+        params,
+        timeout: UPSTREAM_TIMEOUT_MS,
+      });
+
+      records.push(...((data.records ?? []) as LibraryRecord[]));
+      cursor = (data.responseMetadata?.nextCursor as string | undefined) ?? undefined;
+    } while (cursor);
+
+    // ── Filter out UE assets, private sandboxes, and records with no appName
+    const filtered = records.filter(
+      r => r.appName && r['@namespace'] !== 'ue' && r.sandboxType !== 'PRIVATE',
+    );
+
+    if (filtered.length === 0) {
       res.json({ games: [] });
       return;
     }
 
+    // ── Batch catalog lookups by namespace ────────────────────────────────
     const byNamespace = new Map<string, string[]>();
-    for (const e of active) {
-      if (!byNamespace.has(e.namespace)) byNamespace.set(e.namespace, []);
-      byNamespace.get(e.namespace)!.push(e.catalogItemId);
+    for (const r of filtered) {
+      const ns = r['@namespace'];
+      if (!byNamespace.has(ns)) byNamespace.set(ns, []);
+      byNamespace.get(ns)!.push(r.catalogItemId);
     }
 
     interface CatalogItem {
       id: string;
       title: string;
+      categories?: Array<{ path: string }>;
       keyImages?: Array<{ type: string; url: string }>;
     }
 
@@ -184,32 +217,46 @@ epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
     await Promise.all(
       Array.from(byNamespace.entries()).map(async ([ns, ids]) => {
         try {
-          const { data: catalog } = await axios.get(EPIC_CATALOG_URL, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            params: { namespace: ns, id: ids.join(','), country: 'US', locale: 'en-US' },
+          const { data } = await axios.get(`${EPIC_CATALOG_BASE}/${ns}/bulk/items`, {
+            headers: { Authorization: authHeader },
+            params: {
+              id: ids.join(','),
+              country: 'US',
+              locale: 'en-US',
+              includeMainGameDetails: 'true',
+            },
+            timeout: UPSTREAM_TIMEOUT_MS,
           });
-          for (const [id, item] of Object.entries(catalog as Record<string, CatalogItem>)) {
+          for (const [id, item] of Object.entries(data as Record<string, CatalogItem>)) {
             catalogMap.set(id, item);
           }
         } catch {
-          // catalog lookup failure is non-fatal
+          // catalog failure is non-fatal; games fall back to appName
         }
       }),
     );
 
-    const games = active.map(e => {
-      const catalogItem = catalogMap.get(e.catalogItemId);
-      const headerImage = catalogItem?.keyImages?.find(
-        img => img.type === 'DieselStoreFrontWide' || img.type === 'OfferImageWide',
-      )?.url;
+    // ── Build final game list, excluding plugins / digital extras ─────────
+    const games = filtered
+      .filter(r => {
+        const catalog = catalogMap.get(r.catalogItemId);
+        if (!catalog) return true;
+        const categories = catalog.categories?.map(c => c.path.toLowerCase()) ?? [];
+        return !categories.some(c => c.includes('plugins') || c.includes('digitalextras'));
+      })
+      .map(r => {
+        const catalog = catalogMap.get(r.catalogItemId);
+        const headerImage = catalog?.keyImages?.find(
+          img => img.type === 'DieselStoreFrontWide' || img.type === 'OfferImageWide',
+        )?.url;
 
-      return {
-        appId: e.catalogItemId,
-        name: catalogItem?.title ?? e.entitlementName,
-        hoursPlayed: 0,
-        imageUrl: headerImage,
-      };
-    });
+        return {
+          appId: r.appName,
+          name: catalog?.title ?? r.appName,
+          hoursPlayed: 0,
+          imageUrl: headerImage,
+        };
+      });
 
     res.json({ games });
   } catch (err) {

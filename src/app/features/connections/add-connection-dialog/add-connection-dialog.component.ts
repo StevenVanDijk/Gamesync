@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, Validators, AbstractControl } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -79,11 +79,41 @@ import { StoreType } from '../../../core/models/store-connection.model';
         }
 
         @if (form.get('type')?.value === 'epic') {
-          <p class="epic-info">
-            <mat-icon class="info-icon">info</mat-icon>
-            Click <strong>Connect with Epic</strong> to log in with your Epic account.
-            You will be redirected to Epic's login page and back automatically.
-          </p>
+          <div class="epic-section">
+            <p class="epic-info">
+              <mat-icon class="info-icon">info</mat-icon>
+              <span>
+                Click <strong>Open Epic Login</strong> to sign in to your Epic account.
+                After logging in, you will see a page displaying JSON — copy the
+                <code>authorizationCode</code> value and paste it below.
+              </span>
+            </p>
+
+            <button
+              type="button"
+              mat-stroked-button
+              color="accent"
+              class="epic-login-btn"
+              (click)="openEpicLogin()"
+            >
+              <mat-icon>open_in_new</mat-icon>
+              Open Epic Login
+            </button>
+          </div>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Authorization code</mat-label>
+            <input
+              matInput
+              [(ngModel)]="epicCode"
+              [ngModelOptions]="{ standalone: true }"
+              placeholder="Paste the authorizationCode from Epic here"
+            />
+          </mat-form-field>
+
+          @if (epicError()) {
+            <p class="epic-error">{{ epicError() }}</p>
+          }
         }
       </form>
     </mat-dialog-content>
@@ -96,9 +126,9 @@ import { StoreType } from '../../../core/models/store-connection.model';
           mat-flat-button
           color="accent"
           (click)="connectEpic()"
-          [disabled]="epicLoading"
+          [disabled]="epicLoading() || !epicCode.trim()"
         >
-          @if (epicLoading) {
+          @if (epicLoading()) {
             <mat-spinner diameter="20" class="btn-spinner"></mat-spinner>
           } @else {
             Connect with Epic
@@ -119,15 +149,30 @@ import { StoreType } from '../../../core/models/store-connection.model';
   styles: [`
     .dialog-form { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
     .full-width { width: 100%; }
+
+    .epic-section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
     .epic-info {
       display: flex;
       align-items: flex-start;
       gap: 8px;
       color: #bbb;
       font-size: 14px;
-      margin: 8px 0;
+      margin: 0;
     }
     .info-icon { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; }
+    code {
+      background: rgba(255,255,255,0.08);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 13px;
+    }
+    .epic-login-btn { align-self: flex-start; }
+    .epic-error { color: #f44336; font-size: 13px; margin: 0; }
     .btn-spinner { display: inline-block; }
   `],
 })
@@ -137,7 +182,9 @@ export class AddConnectionDialogComponent {
   private readonly connectionSvc = inject(StoreConnectionService);
   private readonly epicApi = inject(EpicApiService);
 
-  epicLoading = false;
+  epicLoading = signal(false);
+  epicError = signal('');
+  epicCode = '';
 
   form = this.fb.group({
     type: ['steam' as StoreType, Validators.required],
@@ -147,7 +194,6 @@ export class AddConnectionDialogComponent {
   });
 
   constructor() {
-    // Dynamically toggle required validators based on store type
     this.form.get('type')!.valueChanges.subscribe(type => {
       const apiKey = this.form.get('apiKey')!;
       const steamId = this.form.get('steamId')!;
@@ -164,6 +210,8 @@ export class AddConnectionDialogComponent {
       label.updateValueAndValidity();
       apiKey.updateValueAndValidity();
       steamId.updateValueAndValidity();
+      this.epicCode = '';
+      this.epicError.set('');
     });
     this.form.get('type')!.updateValueAndValidity({ emitEvent: true });
   }
@@ -175,29 +223,52 @@ export class AddConnectionDialogComponent {
     this.dialogRef.close(true);
   }
 
-  connectEpic(): void {
-    this.epicLoading = true;
+  openEpicLogin(): void {
     this.epicApi.getAuthUrl().subscribe({
-      next: url => {
-        // Redirect the entire page to Epic's login
-        window.location.href = url;
-        // Dialog stays open until redirect completes; close it for cleanliness
-        this.dialogRef.close();
-      },
+      next: url => window.open(url, '_blank', 'noopener,noreferrer'),
       error: () => {
-        this.epicLoading = false;
+        // Fallback: open the known login URL directly
+        const redirectApiUrl =
+          'https://www.epicgames.com/id/api/redirect' +
+          '?clientId=34a02cf8f4414e29b15921876da36f9a&responseType=code';
+        window.open(
+          'https://www.epicgames.com/id/login?redirectUrl=' +
+            encodeURIComponent(redirectApiUrl),
+          '_blank',
+          'noopener,noreferrer',
+        );
       },
     });
   }
 
+  connectEpic(): void {
+    const code = this.epicCode.trim();
+    if (!code) return;
+    this.epicLoading.set(true);
+    this.epicError.set('');
+
+    this.epicApi.exchangeCode(code).subscribe({
+      next: tokens => {
+        this.connectionSvc.add('epic', tokens.displayName ?? 'Epic Account', {
+          accountId: tokens.accountId,
+          displayName: tokens.displayName,
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresAt: tokens.expiresAt,
+        });
+        this.epicLoading.set(false);
+        this.dialogRef.close(true);
+      },
+      error: err => {
+        this.epicLoading.set(false);
+        const detail = err?.error?.detail ?? err?.error?.error ?? err?.message ?? 'Unknown error';
+        this.epicError.set(`Failed to connect: ${detail}`);
+      },
+    });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private jsonValidator(control: AbstractControl): Record<string, true> | null {
-    const val = control.value as string;
-    if (!val) return null;
-    try {
-      JSON.parse(val);
-      return null;
-    } catch {
-      return { invalidJson: true };
-    }
+    return null;
   }
 }

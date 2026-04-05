@@ -1,5 +1,5 @@
 /**
- * US-012 – Epic Games API backend proxy routes.
+ * US-012 – Epic Games API backend proxy routes (launcher client flow).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
@@ -28,31 +28,23 @@ import axios from 'axios';
 const mockGet = vi.mocked(axios.get);
 const mockPost = vi.mocked(axios.post);
 
-const ENV = {
-  EPIC_CLIENT_ID: 'test-client-id',
-  EPIC_CLIENT_SECRET: 'test-secret',
-  EPIC_REDIRECT_URI: 'http://localhost:4200/epic-callback',
-};
-
 beforeEach(() => {
   vi.clearAllMocks();
-  Object.assign(process.env, ENV);
 });
 
 // ── GET /api/epic/auth-url ───────────────────────────────────────────────────
 
 describe('GET /api/epic/auth-url (US-012)', () => {
-  it('should return an Epic authorization URL', async () => {
+  it('should return an Epic login URL containing the public client ID', async () => {
     const res = await request(app).get('/api/epic/auth-url');
     expect(res.status).toBe(200);
-    expect(res.body.url).toContain('epicgames.com');
-    expect(res.body.url).toContain(encodeURIComponent(ENV.EPIC_CLIENT_ID));
+    expect(res.body.url).toContain('epicgames.com/id/login');
+    expect(res.body.url).toContain('34a02cf8f4414e29b15921876da36f9a');
   });
 
-  it('should return 503 when env vars are missing', async () => {
-    delete process.env['EPIC_CLIENT_ID'];
+  it('should include responseType=code in the redirect URL', async () => {
     const res = await request(app).get('/api/epic/auth-url');
-    expect(res.status).toBe(503);
+    expect(res.body.url).toContain('responseType%3Dcode');
   });
 });
 
@@ -64,7 +56,7 @@ describe('POST /api/epic/token (US-012)', () => {
     expect(res.status).toBe(400);
   });
 
-  it('should exchange code for tokens', async () => {
+  it('should exchange authorization code for tokens using launcher client', async () => {
     mockPost.mockResolvedValueOnce({
       data: {
         account_id: 'acc123',
@@ -72,6 +64,7 @@ describe('POST /api/epic/token (US-012)', () => {
         access_token: 'at_abc',
         refresh_token: 'rt_xyz',
         expires_in: 7200,
+        token_type: 'bearer',
       },
     });
 
@@ -81,6 +74,17 @@ describe('POST /api/epic/token (US-012)', () => {
     expect(res.body.accessToken).toBe('at_abc');
     expect(res.body.refreshToken).toBe('rt_xyz');
     expect(typeof res.body.expiresAt).toBe('number');
+
+    // Should use the Epic launcher token endpoint, not api.epicgames.dev
+    expect(mockPost).toHaveBeenCalledWith(
+      expect.stringContaining('account-public-service-prod03.ol.epicgames.com'),
+      expect.stringContaining('grant_type=authorization_code'),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: expect.stringContaining('basic '),
+        }),
+      }),
+    );
   });
 });
 
@@ -101,12 +105,14 @@ describe('POST /api/epic/refresh (US-012)', () => {
       },
     });
 
-    const res = await request(app)
-      .post('/api/epic/refresh')
-      .send({ refreshToken: 'old_rt' });
-
+    const res = await request(app).post('/api/epic/refresh').send({ refreshToken: 'old_rt' });
     expect(res.status).toBe(200);
     expect(res.body.accessToken).toBe('new_at');
+    expect(mockPost).toHaveBeenCalledWith(
+      expect.stringContaining('account-public-service-prod03.ol.epicgames.com'),
+      expect.stringContaining('grant_type=refresh_token'),
+      expect.any(Object),
+    );
   });
 });
 
@@ -118,28 +124,28 @@ describe('GET /api/epic/library/:accountId (US-012)', () => {
     expect(res.status).toBe(400);
   });
 
-  it('should return list of games from entitlements', async () => {
-    // First call: entitlements
+  it('should fetch from library-service and return games', async () => {
+    // Library items response
     mockGet.mockResolvedValueOnce({
       data: {
-        elements: [
+        records: [
           {
-            id: 'ent1',
-            entitlementName: 'fortnite',
-            namespace: 'fn',
+            appName: 'Fortnite',
             catalogItemId: 'cat1',
-            status: 'ACTIVE',
-            active: true,
+            '@namespace': 'fn',
+            sandboxType: 'PUBLIC',
           },
         ],
+        responseMetadata: { nextCursor: null },
       },
     });
-    // Second call: catalog lookup
+    // Catalog lookup
     mockGet.mockResolvedValueOnce({
       data: {
         cat1: {
           id: 'cat1',
           title: 'Fortnite',
+          categories: [{ path: 'games' }],
           keyImages: [{ type: 'DieselStoreFrontWide', url: 'https://img.example.com/fn.jpg' }],
         },
       },
@@ -152,12 +158,50 @@ describe('GET /api/epic/library/:accountId (US-012)', () => {
     expect(res.status).toBe(200);
     expect(res.body.games).toHaveLength(1);
     expect(res.body.games[0].name).toBe('Fortnite');
+    expect(res.body.games[0].appId).toBe('Fortnite');
     expect(res.body.games[0].hoursPlayed).toBe(0);
     expect(res.body.games[0].imageUrl).toBe('https://img.example.com/fn.jpg');
+
+    // Should use the correct library endpoint
+    expect(mockGet).toHaveBeenCalledWith(
+      expect.stringContaining('library-service.live.use1a.on.epicgames.com'),
+      expect.any(Object),
+    );
   });
 
-  it('should return empty games list when no entitlements', async () => {
-    mockGet.mockResolvedValueOnce({ data: { elements: [] } });
+  it('should filter out Unreal Engine namespace items', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: {
+        records: [
+          { appName: 'UEPlugin', catalogItemId: 'c1', '@namespace': 'ue', sandboxType: 'PUBLIC' },
+          { appName: 'MyGame', catalogItemId: 'c2', '@namespace': 'mygame', sandboxType: 'PUBLIC' },
+        ],
+        responseMetadata: { nextCursor: null },
+      },
+    });
+    // Catalog for mygame namespace only
+    mockGet.mockResolvedValueOnce({
+      data: { c2: { id: 'c2', title: 'My Game', categories: [{ path: 'games' }] } },
+    });
+
+    const res = await request(app)
+      .get('/api/epic/library/acc123')
+      .query({ accessToken: 'valid_token' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.games).toHaveLength(1);
+    expect(res.body.games[0].appId).toBe('MyGame');
+  });
+
+  it('should filter out PRIVATE sandbox items', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: {
+        records: [
+          { appName: 'PrivateGame', catalogItemId: 'c1', '@namespace': 'ns1', sandboxType: 'PRIVATE' },
+        ],
+        responseMetadata: { nextCursor: null },
+      },
+    });
 
     const res = await request(app)
       .get('/api/epic/library/acc123')
@@ -167,19 +211,49 @@ describe('GET /api/epic/library/:accountId (US-012)', () => {
     expect(res.body.games).toHaveLength(0);
   });
 
-  it('should fall back to entitlementName when catalog lookup fails', async () => {
+  it('should filter out plugins and digital extras from catalog categories', async () => {
     mockGet.mockResolvedValueOnce({
       data: {
-        elements: [
-          {
-            id: 'ent1',
-            entitlementName: 'my-game',
-            namespace: 'ns1',
-            catalogItemId: 'cat2',
-            status: 'ACTIVE',
-            active: true,
-          },
+        records: [
+          { appName: 'SomePlugin', catalogItemId: 'c1', '@namespace': 'ns1', sandboxType: 'PUBLIC' },
         ],
+        responseMetadata: { nextCursor: null },
+      },
+    });
+    mockGet.mockResolvedValueOnce({
+      data: {
+        c1: { id: 'c1', title: 'Some Plugin', categories: [{ path: 'plugins/utility' }] },
+      },
+    });
+
+    const res = await request(app)
+      .get('/api/epic/library/acc123')
+      .query({ accessToken: 'valid_token' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.games).toHaveLength(0);
+  });
+
+  it('should return empty games list when no records', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: { records: [], responseMetadata: { nextCursor: null } },
+    });
+
+    const res = await request(app)
+      .get('/api/epic/library/acc123')
+      .query({ accessToken: 'valid_token' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.games).toHaveLength(0);
+  });
+
+  it('should fall back to appName when catalog lookup fails', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: {
+        records: [
+          { appName: 'my-game', catalogItemId: 'cat2', '@namespace': 'ns1', sandboxType: 'PUBLIC' },
+        ],
+        responseMetadata: { nextCursor: null },
       },
     });
     mockGet.mockRejectedValueOnce(new Error('catalog unavailable'));
