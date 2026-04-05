@@ -69,7 +69,7 @@ steamRouter.get('/app-details', async (req: Request, res: Response) => {
 
 /** GET /api/steam/reviews/:appid */
 steamRouter.get('/reviews/:appid', async (req: Request, res: Response) => {
-  const { appid } = req.params;
+  const appid = req.params.appid as string;
   if (!/^\d+$/.test(appid)) {
     res.status(400).json({ error: 'appid must be numeric' });
     return;
