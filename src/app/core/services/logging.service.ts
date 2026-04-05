@@ -10,7 +10,7 @@ export interface LogEntry {
   message: string;
 }
 
-const MAX_ENTRIES = 500;
+const MAX_ENTRIES = 10_000;
 
 @Injectable({ providedIn: 'root' })
 export class LoggingService {

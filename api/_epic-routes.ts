@@ -213,6 +213,9 @@ epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
     }
 
     const catalogMap = new Map<string, CatalogItem>();
+    // Track namespaces where the catalog request itself failed (network / auth).
+    // Items in those namespaces will fall back to appName rather than being dropped.
+    const catalogFailedNs = new Set<string>();
 
     await Promise.all(
       Array.from(byNamespace.entries()).map(async ([ns, ids]) => {
@@ -232,7 +235,7 @@ epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
             catalogMap.set(id, item);
           }
         } catch (err) {
-          // catalog failure is non-fatal; games fall back to appName
+          catalogFailedNs.add(ns);
           const detail = axios.isAxiosError(err)
             ? `HTTP ${err.response?.status ?? '?'}: ${JSON.stringify(err.response?.data ?? {}).slice(0, 120)}`
             : String(err);
@@ -241,25 +244,37 @@ epicRouter.get('/library/:accountId', async (req: Request, res: Response) => {
       }),
     );
 
+    // A 32-char lowercase hex string is Epic's internal UUID-style appName used
+    // for assets/DLC that have no human-readable identifier.
+    const UUID_RE = /^[0-9a-f]{32}$/i;
+
     // ── Build final game list, excluding plugins / digital extras / unresolved items ──
     const games = filtered
       .filter(r => {
         const catalog = catalogMap.get(r.catalogItemId);
-        // Drop items with no catalog title — they are DLC stubs, engine assets,
-        // or internal records whose appName is a raw UUID with no display name.
-        if (!catalog?.title) return false;
-        const categories = catalog.categories?.map(c => c.path.toLowerCase()) ?? [];
-        return !categories.some(c => c.includes('plugins') || c.includes('digitalextras'));
+        if (catalog?.title) {
+          // Catalog resolved — apply category filters only.
+          const categories = catalog.categories?.map(c => c.path.toLowerCase()) ?? [];
+          return !categories.some(c => c.includes('plugins') || c.includes('digitalextras'));
+        }
+        if (catalogFailedNs.has(r['@namespace'])) {
+          // Catalog request failed entirely — keep the item if appName is a real
+          // identifier (not a raw UUID), so it still appears in the library.
+          return !UUID_RE.test(r.appName);
+        }
+        // Catalog succeeded but returned no entry for this item — it is a DLC
+        // stub or internal asset with no displayable title; drop it.
+        return false;
       })
       .map(r => {
-        const catalog = catalogMap.get(r.catalogItemId)!;
-        const headerImage = catalog.keyImages?.find(
+        const catalog = catalogMap.get(r.catalogItemId);
+        const headerImage = catalog?.keyImages?.find(
           img => img.type === 'DieselStoreFrontWide' || img.type === 'OfferImageWide',
         )?.url;
 
         return {
           appId: r.appName,
-          name: catalog.title,
+          name: catalog?.title ?? r.appName,
           hoursPlayed: 0,
           imageUrl: headerImage,
         };

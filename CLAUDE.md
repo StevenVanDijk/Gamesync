@@ -1,5 +1,13 @@
 # Development Guidelines
 
+## TypeScript
+
+Vercel compiles the `api/` directory with **TypeScript 5.9.x** (user-provided, `"module": "NodeNext"`).
+Key implications:
+- All relative imports inside `api/` **must** use explicit `.js` extensions (Node.js ESM requirement).
+- Route params (`req.params.foo`) must be cast to `string` — newer `@types/express` widens them to `string | string[]`.
+- Always verify the production build (`npm run build`) passes locally before pushing; the Vercel TS version may be stricter than the Angular build.
+
 ## Change Process
 
 Every change to this codebase must follow these rules:
