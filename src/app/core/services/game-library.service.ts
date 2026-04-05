@@ -1,5 +1,5 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
-import { Observable, EMPTY, forkJoin, of, switchMap, finalize } from 'rxjs';
+import { Observable, EMPTY, forkJoin, of, switchMap, finalize, from, mergeMap } from 'rxjs';
 import { tap, catchError } from 'rxjs/operators';
 import { Game } from '../models/game.model';
 import {
@@ -13,6 +13,9 @@ import { EpicApiService } from './epic-api.service';
 import { LoggingService } from './logging.service';
 
 const TAG = 'Gamesync';
+
+/** Maximum number of concurrent background metadata fetches. */
+const METADATA_CONCURRENCY = 10;
 
 @Injectable({ providedIn: 'root' })
 export class GameLibraryService {
@@ -118,29 +121,46 @@ export class GameLibraryService {
 
     // ── Pass 2: background-fetch for games not in cache ───────────────────
     const uncached = steamGames.filter(g => !cacheHits.has(g.id));
-    if (uncached.length > 0) {
-      this.logger.info(TAG, `metadata background fetch: queuing ${uncached.length} game(s)`);
-      // Mark all uncached games as loading in one signal write.
-      this._fetchingMetadataIds.update(ids => new Set([...ids, ...uncached.map(g => g.id)]));
-    }
-    for (const game of uncached) {
-      this.steamApi
-        .getAppMetadata(game.appId)
-        .pipe(
-          catchError(err => {
-            this.logger.warn(TAG, `background metadata fetch failed for appId=${game.appId}: ${err?.message ?? err}`);
-            return EMPTY;
-          }),
-          finalize(() => {
-            this._fetchingMetadataIds.update(ids => {
-              const next = new Set(ids);
-              next.delete(game.id);
-              return next;
-            });
-          }),
-        )
-        .subscribe(metadata => this.updateGameMetadata(game.id, metadata));
-    }
+    if (uncached.length === 0) return;
+
+    this.logger.info(
+      TAG,
+      `metadata background fetch: ${uncached.length} game(s), concurrency=${METADATA_CONCURRENCY}`,
+    );
+    // Mark all uncached games as loading in one signal write.
+    this._fetchingMetadataIds.update(ids => new Set([...ids, ...uncached.map(g => g.id)]));
+
+    from(uncached)
+      .pipe(
+        mergeMap(
+          game =>
+            this.steamApi.getAppMetadata(game.appId).pipe(
+              tap(metadata => {
+                this.logger.info(
+                  TAG,
+                  `metadata applied: id=${game.id} appId=${game.appId} score=${metadata.communityScore ?? 'n/a'} image=${metadata.imageUrl ? 'yes' : 'no'}`,
+                );
+                this.updateGameMetadata(game.id, metadata);
+              }),
+              catchError(err => {
+                this.logger.warn(
+                  TAG,
+                  `background metadata fetch failed for appId=${game.appId}: ${err?.message ?? err}`,
+                );
+                return EMPTY;
+              }),
+              finalize(() => {
+                this._fetchingMetadataIds.update(ids => {
+                  const next = new Set(ids);
+                  next.delete(game.id);
+                  return next;
+                });
+              }),
+            ),
+          METADATA_CONCURRENCY,
+        ),
+      )
+      .subscribe();
   }
 
   private fetchForConnection(conn: StoreConnection): Observable<Game[]> {

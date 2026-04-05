@@ -132,6 +132,9 @@ export class SteamApiService {
 
   /**
    * Fetch rich metadata for a single Steam app via the backend proxy.
+   * Rate-limiting is handled by the caller (mergeMap concurrency) and by
+   * retryOn429 — no internal rate-limiter queue is used here so that
+   * concurrent callers don't serialize behind a single queue.
    */
   getAppMetadata(appId: string): Observable<GameMetadata> {
     const cacheKey = `steam_meta_${appId}`;
@@ -145,84 +148,88 @@ export class SteamApiService {
     const reviewsUrl = `${this.backendUrl}/reviews/${appId}`;
     this.logger.info(TAG, `fetching metadata for appId=${appId}`);
 
-    return this.rateLimiter.enqueue(() =>
-      this.http
-        .get<SteamAppDetailsResponse>(detailsUrl, {
-          params: new HttpParams().set('appids', appId),
-        })
-        .pipe(
-          this.retryOn429('app-details'),
-          switchMap(res => {
-            const entry = res[appId];
-            const details = entry?.success ? entry.data : undefined;
-            if (!details) {
-              this.logger.warn(
-                TAG,
-                `app-details: no data returned for appId=${appId} (success=${entry?.success})`,
-              );
-            }
-
-            const yearPublished = details?.release_date?.date
-              ? this.parseYear(details.release_date.date)
-              : undefined;
-
-            const tags = [
-              ...(details?.genres?.map(g => g.description) ?? []),
-              ...(details?.categories?.map(c => c.description) ?? []),
-            ];
-
-            return this.rateLimiter.enqueue(() =>
-              this.http
-                .get<SteamReviewsResponse>(reviewsUrl, {
-                  params: new HttpParams()
-                    .set('json', '1')
-                    .set('num_per_page', '0')
-                    .set('language', 'all'),
-                })
-                .pipe(
-                  this.retryOn429('reviews'),
-                  map(reviews => {
-                    const qs = reviews?.query_summary;
-                    const communityScore =
-                      qs && qs.total_reviews > 0
-                        ? Math.round(
-                            (qs.total_positive / qs.total_reviews) * 100,
-                          )
-                        : undefined;
-
-                    const metadata: GameMetadata = {
-                      imageUrl: details?.header_image,
-                      yearPublished,
-                      tags: tags.length ? tags : undefined,
-                      communityScore,
-                      fetchedAt: Date.now(),
-                    };
-                    this.cache.set(cacheKey, metadata, METADATA_TTL);
-                    return metadata;
-                  }),
-                  catchError(err => {
-                    const detail = err?.error?.detail ?? err?.error?.error ?? '';
-                    this.logger.error(
-                      TAG,
-                      `reviews failed for appId=${appId} — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
-                      err,
-                    );
-                    throw err;
-                  }),
-                ),
-            );
-          }),
-          catchError(err => {
-            const detail = err?.error?.detail ?? err?.error?.error ?? '';
-            this.logger.error(
+    return this.http
+      .get<SteamAppDetailsResponse>(detailsUrl, {
+        params: new HttpParams().set('appids', appId),
+      })
+      .pipe(
+        this.retryOn429('app-details'),
+        switchMap(res => {
+          const entry = res[appId];
+          const details = entry?.success ? entry.data : undefined;
+          if (details) {
+            this.logger.info(
               TAG,
-              `app-details failed for appId=${appId} — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
-              err,
+              `app-details OK appId=${appId} name="${details.name}" image=${details.header_image ? 'yes' : 'no'}`,
             );
-            throw err;
-          }),
-        ),
-    );
+          } else {
+            this.logger.warn(
+              TAG,
+              `app-details: no data returned for appId=${appId} (success=${entry?.success})`,
+            );
+          }
+
+          const yearPublished = details?.release_date?.date
+            ? this.parseYear(details.release_date.date)
+            : undefined;
+
+          const tags = [
+            ...(details?.genres?.map(g => g.description) ?? []),
+            ...(details?.categories?.map(c => c.description) ?? []),
+          ];
+
+          return this.http
+            .get<SteamReviewsResponse>(reviewsUrl, {
+              params: new HttpParams()
+                .set('json', '1')
+                .set('num_per_page', '0')
+                .set('language', 'all'),
+            })
+            .pipe(
+              this.retryOn429('reviews'),
+              map(reviews => {
+                const qs = reviews?.query_summary;
+                const communityScore =
+                  qs && qs.total_reviews > 0
+                    ? Math.round((qs.total_positive / qs.total_reviews) * 100)
+                    : undefined;
+
+                this.logger.info(
+                  TAG,
+                  `reviews OK appId=${appId} totalReviews=${qs?.total_reviews ?? 0} score=${communityScore ?? 'n/a'}`,
+                );
+
+                const metadata: GameMetadata = {
+                  imageUrl: details?.header_image,
+                  yearPublished,
+                  tags: tags.length ? tags : undefined,
+                  communityScore,
+                  fetchedAt: Date.now(),
+                };
+                this.cache.set(cacheKey, metadata, METADATA_TTL);
+                return metadata;
+              }),
+              catchError(err => {
+                const detail = err?.error?.detail ?? err?.error?.error ?? '';
+                this.logger.error(
+                  TAG,
+                  `reviews failed for appId=${appId} — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
+                  err,
+                );
+                throw err;
+              }),
+            );
+        }),
+        catchError(err => {
+          const detail = err?.error?.detail ?? err?.error?.error ?? '';
+          this.logger.error(
+            TAG,
+            `app-details failed for appId=${appId} — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
+            err,
+          );
+          throw err;
+        }),
+      );
   }
 
   /**

@@ -240,6 +240,19 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-020: Configurable concurrent metadata fetching
+**As a** developer,
+**I want** the number of concurrent background metadata fetches to be configurable and set to 10,
+**So that** the library populates quickly without flooding Steam with hundreds of sequential requests.
+
+**Acceptance criteria:**
+- [ ] Background metadata fetches run concurrently up to a configurable limit (default: 10)
+- [ ] The metadata rate limiter is removed from `getAppMetadata`; Steam's 429 responses are handled by the existing retry operator
+- [ ] Diagnostic log entries are emitted for each metadata response (app-details name/image, review score)
+- [ ] Log entry is emitted when metadata is applied to a game in the library
+
+---
+
 ### US-009: Successful build required
 **As a** developer,
 **I want** every change to produce a passing production build,
