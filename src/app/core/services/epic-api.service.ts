@@ -85,8 +85,8 @@ export class EpicApiService {
           .pipe(
             map(res => {
               this.logger.info(TAG, `library: ${res.games.length} game(s) received`);
-              return res.games.map((g, i) => ({
-                id: `${storeId}_${g.appId}_${i}`,
+              return res.games.map(g => ({
+                id: `${storeId}_${g.appId}`,
                 appId: g.appId,
                 storeId,
                 name: g.name,

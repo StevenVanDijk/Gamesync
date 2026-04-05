@@ -70,6 +70,10 @@ steamRouter.get('/app-details', async (req: Request, res: Response) => {
 /** GET /api/steam/reviews/:appid */
 steamRouter.get('/reviews/:appid', async (req: Request, res: Response) => {
   const { appid } = req.params;
+  if (!/^\d+$/.test(appid)) {
+    res.status(400).json({ error: 'appid must be numeric' });
+    return;
+  }
   try {
     const { data } = await axios.get(`${STEAM_STORE_BASE}/appreviews/${appid}`, {
       params: { json: 1, language: 'all', purchase_type: 'all' },

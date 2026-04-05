@@ -179,9 +179,9 @@ export class SteamApiService {
                 })
                 .pipe(
                   map(reviews => {
-                    const qs = reviews.query_summary;
+                    const qs = reviews?.query_summary;
                     const communityScore =
-                      qs.total_reviews > 0
+                      qs && qs.total_reviews > 0
                         ? Math.round(
                             (qs.total_positive / qs.total_reviews) * 100,
                           )

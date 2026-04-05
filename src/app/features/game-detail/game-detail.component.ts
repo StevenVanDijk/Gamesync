@@ -1,4 +1,5 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
@@ -152,6 +153,7 @@ export class GameDetailComponent implements OnInit {
   private readonly librarySvc = inject(GameLibraryService);
   private readonly steamApi = inject(SteamApiService);
   private readonly connectionSvc = inject(StoreConnectionService);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly game = signal<Game | undefined>(undefined);
   protected readonly loading = signal(true);
@@ -176,7 +178,7 @@ export class GameDetailComponent implements OnInit {
     if (conn?.type !== 'steam') return;
 
     this.metadataLoading.set(true);
-    this.steamApi.getAppMetadata(g.appId).subscribe({
+    this.steamApi.getAppMetadata(g.appId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: metadata => {
         this.librarySvc.updateGameMetadata(g.id, metadata);
         this.game.update(current => current ? { ...current, metadata } : current);

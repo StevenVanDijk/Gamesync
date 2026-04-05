@@ -1,6 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, Validators, AbstractControl } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -181,6 +182,7 @@ export class AddConnectionDialogComponent {
   private readonly dialogRef = inject(MatDialogRef<AddConnectionDialogComponent>);
   private readonly connectionSvc = inject(StoreConnectionService);
   private readonly epicApi = inject(EpicApiService);
+  private readonly destroyRef = inject(DestroyRef);
 
   epicLoading = signal(false);
   epicError = signal('');
@@ -194,7 +196,7 @@ export class AddConnectionDialogComponent {
   });
 
   constructor() {
-    this.form.get('type')!.valueChanges.subscribe(type => {
+    this.form.get('type')!.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(type => {
       const apiKey = this.form.get('apiKey')!;
       const steamId = this.form.get('steamId')!;
       const label = this.form.get('label')!;
@@ -267,8 +269,4 @@ export class AddConnectionDialogComponent {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private jsonValidator(control: AbstractControl): Record<string, true> | null {
-    return null;
-  }
 }

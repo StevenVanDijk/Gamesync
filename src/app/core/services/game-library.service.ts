@@ -121,7 +121,10 @@ export class GameLibraryService {
     for (const game of uncached) {
       this.steamApi
         .getAppMetadata(game.appId)
-        .pipe(catchError(() => EMPTY))
+        .pipe(catchError(err => {
+          this.logger.warn(TAG, `background metadata fetch failed for appId=${game.appId}: ${err?.message ?? err}`);
+          return EMPTY;
+        }))
         .subscribe(metadata => this.updateGameMetadata(game.id, metadata));
     }
   }
