@@ -2,18 +2,22 @@ import { Injectable } from '@angular/core';
 
 interface CacheEntry<T> {
   data: T;
-  expiresAt: number;
+  expiresAt: number; // 0 = permanent (never expires)
 }
 
-/** 24 hours default TTL for Steam metadata */
+/** Default TTL for owned-games lists (24 h). */
 export const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Pass as ttlMs to store an entry that never expires. */
+export const PERMANENT_CACHE = 0;
 
 @Injectable({ providedIn: 'root' })
 export class CacheService {
   private readonly PREFIX = 'gamesync_cache_';
 
   set<T>(key: string, data: T, ttlMs = DEFAULT_CACHE_TTL_MS): void {
-    const entry: CacheEntry<T> = { data, expiresAt: Date.now() + ttlMs };
+    const expiresAt = ttlMs === PERMANENT_CACHE ? PERMANENT_CACHE : Date.now() + ttlMs;
+    const entry: CacheEntry<T> = { data, expiresAt };
     try {
       localStorage.setItem(this.PREFIX + key, JSON.stringify(entry));
     } catch {
@@ -26,7 +30,7 @@ export class CacheService {
     if (!raw) return null;
     try {
       const entry: CacheEntry<T> = JSON.parse(raw);
-      if (Date.now() > entry.expiresAt) {
+      if (entry.expiresAt !== PERMANENT_CACHE && Date.now() > entry.expiresAt) {
         localStorage.removeItem(this.PREFIX + key);
         return null;
       }

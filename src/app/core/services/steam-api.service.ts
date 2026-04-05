@@ -1,7 +1,7 @@
 import { inject, Injectable, InjectionToken } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, of, map, switchMap, catchError } from 'rxjs';
-import { CacheService, DEFAULT_CACHE_TTL_MS } from './cache.service';
+import { Observable, of, map, switchMap, catchError, retry, timer, OperatorFunction } from 'rxjs';
+import { CacheService, PERMANENT_CACHE } from './cache.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { LoggingService } from './logging.service';
 import { Game, GameMetadata } from '../models/game.model';
@@ -58,8 +58,9 @@ export const STEAM_BACKEND_URL = new InjectionToken<string>('STEAM_BACKEND_URL',
   factory: () => '/api/steam',
 });
 
-/** Cache TTL: 24 hours for metadata, 1 hour for owned-games list */
-const METADATA_TTL = DEFAULT_CACHE_TTL_MS;
+/** Metadata is cached permanently — game cover/tags/scores rarely change. */
+const METADATA_TTL = PERMANENT_CACHE;
+/** Owned-games list is refreshed every hour to pick up new purchases. */
 const OWNED_GAMES_TTL = 60 * 60 * 1000;
 
 const TAG = 'Steam';
@@ -150,6 +151,7 @@ export class SteamApiService {
           params: new HttpParams().set('appids', appId),
         })
         .pipe(
+          this.retryOn429('app-details'),
           switchMap(res => {
             const entry = res[appId];
             const details = entry?.success ? entry.data : undefined;
@@ -178,6 +180,7 @@ export class SteamApiService {
                     .set('language', 'all'),
                 })
                 .pipe(
+                  this.retryOn429('reviews'),
                   map(reviews => {
                     const qs = reviews?.query_summary;
                     const communityScore =
@@ -220,6 +223,23 @@ export class SteamApiService {
           }),
         ),
     );
+  }
+
+  /**
+   * Retry operator that backs off on HTTP 429 (Too Many Requests) and
+   * re-throws immediately for any other status code.
+   * Delays: 2 s → 4 s → 8 s (up to 3 retries).
+   */
+  private retryOn429<T>(label: string): OperatorFunction<T, T> {
+    return retry({
+      count: 3,
+      delay: (err, attempt) => {
+        if (err?.status !== 429) throw err;
+        const waitMs = (2 ** attempt) * 1_000;
+        this.logger.warn(TAG, `429 from ${label} — retry ${attempt}/3 in ${waitMs / 1000}s`);
+        return timer(waitMs);
+      },
+    });
   }
 
   private parseYear(dateStr: string): number | undefined {

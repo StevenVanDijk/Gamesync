@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Observable } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
+import { vi, afterEach as vitestAfterEach } from 'vitest';
 import { SteamApiService, STEAM_BACKEND_URL } from './steam-api.service';
 import { CacheService } from './cache.service';
 import { RateLimiterService } from './rate-limiter.service';
@@ -151,5 +152,71 @@ describe('SteamApiService (US-002, US-005, US-006, US-011)', () => {
 
     const meta = await resultPromise;
     expect(meta.communityScore).toBeUndefined();
+  });
+
+  // ── US-017 : permanent cache ─────────────────────────────────────────────
+
+  it('should store metadata with permanent cache (expiresAt=0, never evicted) (US-017)', async () => {
+    const resultPromise = firstValueFrom(service.getAppMetadata('999'));
+
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/app-details`).flush({
+      '999': { success: true, data: { name: 'Game', header_image: 'img.jpg' } },
+    });
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/reviews/999`).flush({
+      success: 1,
+      query_summary: { total_positive: 80, total_reviews: 100, review_score: 8, review_score_desc: 'Positive' },
+    });
+
+    await resultPromise;
+
+    const raw = localStorage.getItem('gamesync_cache_steam_meta_999');
+    expect(raw).toBeTruthy();
+    expect(JSON.parse(raw!).expiresAt).toBe(0);
+
+    // Should still be retrievable without HTTP on a second call
+    const meta2 = await firstValueFrom(service.getAppMetadata('999'));
+    httpMock.expectNone(() => true);
+    expect(meta2.imageUrl).toBe('img.jpg');
+  });
+
+  // ── US-017 : 429 retry ───────────────────────────────────────────────────
+
+  it('should retry app-details on 429 and succeed on retry (US-017)', async () => {
+    vi.useFakeTimers();
+    const resultPromise = firstValueFrom(service.getAppMetadata('440'));
+
+    // First attempt → 429
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/app-details`)
+      .flush('Rate limited', { status: 429, statusText: 'Too Many Requests' });
+
+    // Advance past the 2 s back-off (attempt 1 → 2^1 * 1000 ms)
+    await vi.advanceTimersByTimeAsync(2100);
+
+    // Retry attempt → success
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/app-details`).flush({
+      '440': { success: true, data: { name: 'TF2', header_image: 'img.jpg' } },
+    });
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/reviews/440`).flush({
+      success: 1,
+      query_summary: { total_positive: 90, total_reviews: 100, review_score: 8, review_score_desc: 'Very Positive' },
+    });
+
+    vi.useRealTimers();
+    const meta = await resultPromise;
+    expect(meta.imageUrl).toBe('img.jpg');
+  });
+
+  it('should not retry non-429 errors (US-017)', async () => {
+    let caughtErr: unknown;
+    const resultPromise = firstValueFrom(service.getAppMetadata('440'))
+      .catch(e => { caughtErr = e; });
+
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/app-details`)
+      .flush('Server Error', { status: 500, statusText: 'Internal Server Error' });
+
+    await resultPromise;
+    // No retry — no further requests expected
+    httpMock.expectNone(() => true);
+    expect(caughtErr).toBeDefined();
   });
 });

@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { CacheService } from './cache.service';
+import { CacheService, PERMANENT_CACHE } from './cache.service';
 
 describe('CacheService (US-006 – caching)', () => {
   let service: CacheService;
@@ -39,6 +39,15 @@ describe('CacheService (US-006 – caching)', () => {
     service.clear();
     expect(service.get('a')).toBeNull();
     expect(service.get('b')).toBeNull();
+  });
+
+  it('should never expire a PERMANENT_CACHE entry (US-017)', () => {
+    service.set('forever', { x: 1 }, PERMANENT_CACHE);
+    // Verify the raw entry has expiresAt === 0 (the sentinel)
+    const raw = JSON.parse(localStorage.getItem('gamesync_cache_forever')!);
+    expect(raw.expiresAt).toBe(0);
+    // Still readable regardless of time
+    expect(service.get<{ x: number }>('forever')).toEqual({ x: 1 });
   });
 
   it('should not affect non-cache localStorage keys when clearing', () => {

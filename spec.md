@@ -181,7 +181,7 @@ This file contains user stories for the Gamesync project. Every change must be r
 - [ ] After a sync, any previously cached metadata is applied to game cards immediately
 - [ ] Steam games without cached metadata are fetched in the background automatically
 - [ ] Background fetches are paced through the rate limiter so Steam is not flooded
-- [ ] Metadata is stored in localStorage with a 24-hour TTL
+- [ ] Metadata is stored in localStorage permanently (no expiry)
 - [ ] Background fetch failures are silently ignored (do not affect the library view)
 
 ---
@@ -197,6 +197,19 @@ This file contains user stories for the Gamesync project. Every change must be r
 - [ ] Compact cards have a smaller image area and omit tags and year
 - [ ] Card view remains the default
 - [ ] The toggle is visible on mobile without breaking the header layout
+
+---
+
+### US-017: Resilient metadata fetching (429 retry + permanent cache)
+**As a** user,
+**I want** the app to handle Steam rate-limiting responses gracefully and never re-fetch data it already has,
+**So that** my library populates reliably even when Steam throttles requests.
+
+**Acceptance criteria:**
+- [ ] When Steam returns HTTP 429, the request is retried up to 3 times with exponential back-off (2 s, 4 s, 8 s)
+- [ ] Non-429 errors are not retried
+- [ ] Game metadata is cached permanently in localStorage (no TTL expiry)
+- [ ] A cache hit always bypasses the network, even after the app restarts
 
 ---
 
