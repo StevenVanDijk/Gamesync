@@ -6,6 +6,16 @@ export interface GameMetadata {
   fetchedAt?: number; // epoch ms – used for cache invalidation
 }
 
+/**
+ * A Steam Store search result used as a matching candidate for non-Steam games.
+ * Stored on the game when no exact title match was found so the user can pick.
+ */
+export interface SteamCandidate {
+  appId: string;
+  name: string;
+  imageUrl?: string;
+}
+
 export interface Game {
   /** Globally unique: `{storeId}_{appId}` */
   id: string;
@@ -17,4 +27,9 @@ export interface Game {
   /** Total hours played (converted from store-native units) */
   hoursPlayed: number;
   metadata?: GameMetadata;
+  /**
+   * Steam Store search candidates for non-Steam games when no exact title
+   * match was found automatically. Cleared once the user selects a match.
+   */
+  steamCandidates?: SteamCandidate[];
 }

@@ -67,7 +67,31 @@ steamRouter.get('/app-details', async (req: Request, res: Response) => {
   }
 });
 
-/** GET /api/steam/reviews/:appid */
+/** GET /api/steam/search?term=<title> — search the Steam Store by game title */
+steamRouter.get('/search', async (req: Request, res: Response) => {
+  const term = req.query.term as string;
+  if (!term?.trim()) {
+    res.status(400).json({ error: 'term query param is required' });
+    return;
+  }
+  try {
+    const { data } = await axios.get(`${STEAM_STORE_BASE}/api/storesearch/`, {
+      params: { term, l: 'english', cc: 'US' },
+      timeout: UPSTREAM_TIMEOUT_MS,
+    });
+    const candidates = (data.items ?? []).map(
+      (item: { id: number; name: string; tiny_image?: string }) => ({
+        appId: String(item.id),
+        name: item.name,
+        imageUrl: item.tiny_image,
+      }),
+    );
+    res.json({ candidates });
+  } catch (err) {
+    forwardError(res, err);
+  }
+});
+
 steamRouter.get('/reviews/:appid', async (req: Request, res: Response) => {
   const appid = req.params.appid as string;
   if (!/^\d+$/.test(appid)) {

@@ -64,7 +64,10 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
   });
 
   afterEach(() => {
-    // Drain any pending background metadata requests (app-details triggers reviews).
+    // Drain any pending background requests so httpMock.verify() passes.
+    httpMock
+      .match(r => r.url.includes('/search'))
+      .forEach(r => r.flush({ candidates: [] }));
     httpMock
       .match(r => r.url.includes('app-details'))
       .forEach(r => r.flush({}));
@@ -203,6 +206,81 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
         success: 1,
         query_summary: { total_positive: 90, total_reviews: 100, review_score: 8, review_score_desc: 'Very Positive' },
       });
+  });
+
+  it('should search Steam Store for Epic games without a community score (US-022)', async () => {
+    connectionSvc.add('epic', 'My Epic', epicConfig);
+    const resultPromise = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`)).flush(epicLibraryFlush);
+    await resultPromise;
+
+    // Background search should have fired for "Fortnite"
+    const searchReq = httpMock.expectOne(r => r.url.includes('/search'));
+    expect(searchReq.request.params.get('term')).toBe('Fortnite');
+    searchReq.flush({ candidates: [] }); // no match
+  });
+
+  it('should auto-match and fetch metadata when Steam title matches exactly (US-022)', async () => {
+    connectionSvc.add('epic', 'My Epic', epicConfig);
+    const resultPromise = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`)).flush(epicLibraryFlush);
+    await resultPromise;
+
+    // Return exact match from search
+    httpMock.expectOne(r => r.url.includes('/search')).flush({
+      candidates: [{ appId: '1691700', name: 'Fortnite', imageUrl: 'cap.jpg' }],
+    });
+
+    // Metadata should now be fetched for the matched appId
+    httpMock.expectOne(r => r.url.includes('app-details') && r.params.get('appids') === '1691700')
+      .flush({ '1691700': { success: true, data: { name: 'Fortnite', header_image: 'hdr.jpg' } } });
+    httpMock.expectOne(r => r.url.includes('reviews/1691700'))
+      .flush({ success: 1, query_summary: { total_positive: 80, total_reviews: 100, review_score: 8, review_score_desc: '' } });
+
+    const epicGame = librarySvc.games().find(g => g.name === 'Fortnite')!;
+    expect(epicGame.metadata?.imageUrl).toBe('hdr.jpg');
+    expect(epicGame.metadata?.communityScore).toBe(80);
+  });
+
+  it('should store candidates when no exact Steam title match is found (US-022)', async () => {
+    connectionSvc.add('epic', 'My Epic', epicConfig);
+    const resultPromise = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`)).flush(epicLibraryFlush);
+    await resultPromise;
+
+    // Return a near-match (not exact)
+    httpMock.expectOne(r => r.url.includes('/search')).flush({
+      candidates: [{ appId: '1691700', name: 'Fortnite Battle Royale', imageUrl: 'cap.jpg' }],
+    });
+
+    const epicGame = librarySvc.games().find(g => g.name === 'Fortnite')!;
+    expect(epicGame.steamCandidates).toHaveLength(1);
+    expect(epicGame.steamCandidates![0].name).toBe('Fortnite Battle Royale');
+    // No metadata fetch expected (no exact match)
+  });
+
+  it('should not re-search when a confirmed match is already cached (US-022)', async () => {
+    // Add connection first to get the generated storeId used as part of gameId
+    const conn = connectionSvc.add('epic', 'My Epic', epicConfig);
+    const epicGameId = `${conn.id}_fn`; // storeId_appId
+
+    localStorage.setItem(
+      `gamesync_cache_steam_match_${epicGameId}`,
+      JSON.stringify({ data: '1691700', expiresAt: 0 }),
+    );
+    localStorage.setItem(
+      'gamesync_cache_steam_meta_1691700',
+      JSON.stringify({ data: { communityScore: 82, imageUrl: 'img.jpg', fetchedAt: Date.now() }, expiresAt: 0 }),
+    );
+
+    const resultPromise = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`)).flush(epicLibraryFlush);
+    await resultPromise;
+
+    // No search request expected — confirmed match already in cache
+    httpMock.expectNone(r => r.url.includes('/search'));
+    const epicGame = librarySvc.games().find(g => g.name === 'Fortnite')!;
+    expect(epicGame.metadata?.communityScore).toBe(82);
   });
 
   it('should emit empty array when no connections exist (US-001)', async () => {

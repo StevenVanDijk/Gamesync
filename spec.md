@@ -265,6 +265,22 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-022: Steam metadata enrichment for non-Steam games
+**As a** user,
+**I want** the app to automatically search Steam for a matching game title and fetch its metadata for my Epic (and other non-Steam) games,
+**So that** I can see community scores, cover art, and tags for games regardless of where I bought them.
+
+**Acceptance criteria:**
+- [ ] After a sync, non-Steam games are searched on the Steam Store by title in the background
+- [ ] If an exact title match is found, metadata is fetched automatically and applied to the game
+- [ ] If no exact match is found, the top Steam candidates are stored and surfaced in the game detail view
+- [ ] In the game detail, the user can select the correct Steam entry from the candidates list to load its metadata
+- [ ] Confirmed matches (user-selected or auto-matched) are cached permanently so re-syncs don't re-search
+- [ ] Search results (candidates) are cached for 24 hours
+- [ ] Background search respects the same concurrency limit as Steam metadata fetching
+
+---
+
 ### US-009: Successful build required
 **As a** developer,
 **I want** every change to produce a passing production build,

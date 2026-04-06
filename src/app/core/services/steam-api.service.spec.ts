@@ -179,6 +179,45 @@ describe('SteamApiService (US-002, US-005, US-006, US-011)', () => {
     expect(meta2.imageUrl).toBe('img.jpg');
   });
 
+  // ── US-022 : Steam Store search ─────────────────────────────────────────
+
+  it('should call /search and return candidates (US-022)', async () => {
+    const resultPromise = firstValueFrom(service.searchStore('Fortnite'));
+
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/search`).flush({
+      candidates: [{ appId: '1691700', name: 'Fortnite', imageUrl: 'img.jpg' }],
+    });
+
+    const candidates = await resultPromise;
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].appId).toBe('1691700');
+    expect(candidates[0].name).toBe('Fortnite');
+  });
+
+  it('should return empty array when search yields no candidates (US-022)', async () => {
+    const resultPromise = firstValueFrom(service.searchStore('zzz-no-match'));
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/search`).flush({ candidates: [] });
+    const candidates = await resultPromise;
+    expect(candidates).toHaveLength(0);
+  });
+
+  // ── US-022 : match/candidate cache helpers ────────────────────────────────
+
+  it('should store and retrieve confirmed match (US-022)', () => {
+    expect(service.getConfirmedMatch('game_1')).toBeNull();
+    service.setConfirmedMatch('game_1', '1691700');
+    expect(service.getConfirmedMatch('game_1')).toBe('1691700');
+  });
+
+  it('should store, retrieve, and clear candidates (US-022)', () => {
+    const candidates = [{ appId: '1691700', name: 'Fortnite' }];
+    expect(service.getCachedCandidates('game_2')).toBeNull();
+    service.setCachedCandidates('game_2', candidates);
+    expect(service.getCachedCandidates('game_2')).toEqual(candidates);
+    service.clearCandidates('game_2');
+    expect(service.getCachedCandidates('game_2')).toBeNull();
+  });
+
   // ── US-017 : 429 retry ───────────────────────────────────────────────────
 
   it('should retry app-details on 429 and succeed on retry (US-017)', async () => {

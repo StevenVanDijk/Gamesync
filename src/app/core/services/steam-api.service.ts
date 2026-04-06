@@ -1,10 +1,10 @@
 import { inject, Injectable, InjectionToken } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, of, map, switchMap, catchError, retry, timer, OperatorFunction } from 'rxjs';
+import { Observable, of, map, switchMap, catchError, retry, timer, OperatorFunction, throwError } from 'rxjs';
 import { CacheService, PERMANENT_CACHE } from './cache.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { LoggingService } from './logging.service';
-import { Game, GameMetadata } from '../models/game.model';
+import { Game, GameMetadata, SteamCandidate } from '../models/game.model';
 import { SteamConnectionConfig } from '../models/store-connection.model';
 
 // ── Raw Steam API response shapes ────────────────────────────────────────────
@@ -62,6 +62,10 @@ export const STEAM_BACKEND_URL = new InjectionToken<string>('STEAM_BACKEND_URL',
 const METADATA_TTL = PERMANENT_CACHE;
 /** Owned-games list is refreshed every hour to pick up new purchases. */
 const OWNED_GAMES_TTL = 60 * 60 * 1000;
+/** Store search results expire after 24 hours. */
+const SEARCH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/** Confirmed title→appId matches are permanent (user/auto decision). */
+const MATCH_CACHE_TTL = PERMANENT_CACHE;
 
 const TAG = 'Steam';
 
@@ -230,6 +234,52 @@ export class SteamApiService {
           throw err;
         }),
       );
+  }
+
+  // ── Steam Store title search ──────────────────────────────────────────────
+
+  /**
+   * Search the Steam Store by game title via the backend proxy.
+   * Returns the top matching candidates (up to the store's default limit).
+   */
+  searchStore(term: string): Observable<SteamCandidate[]> {
+    const url = `${this.backendUrl}/search`;
+    this.logger.info(TAG, `store search: "${term}"`);
+    return this.http
+      .get<{ candidates: SteamCandidate[] }>(url, {
+        params: new HttpParams().set('term', term),
+      })
+      .pipe(
+        map(res => res.candidates ?? []),
+        catchError(err => {
+          this.logger.warn(TAG, `store search failed for "${term}" — HTTP ${err?.status ?? '?'}`);
+          return throwError(() => err);
+        }),
+      );
+  }
+
+  // ── Confirmed match cache (gameId → Steam appId) ─────────────────────────
+
+  getConfirmedMatch(gameId: string): string | null {
+    return this.cache.get<string>(`steam_match_${gameId}`);
+  }
+
+  setConfirmedMatch(gameId: string, steamAppId: string): void {
+    this.cache.set(`steam_match_${gameId}`, steamAppId, MATCH_CACHE_TTL);
+  }
+
+  // ── Search candidates cache (gameId → SteamCandidate[]) ─────────────────
+
+  getCachedCandidates(gameId: string): SteamCandidate[] | null {
+    return this.cache.get<SteamCandidate[]>(`steam_candidates_${gameId}`);
+  }
+
+  setCachedCandidates(gameId: string, candidates: SteamCandidate[]): void {
+    this.cache.set(`steam_candidates_${gameId}`, candidates, SEARCH_CACHE_TTL_MS);
+  }
+
+  clearCandidates(gameId: string): void {
+    this.cache.delete(`steam_candidates_${gameId}`);
   }
 
   /**

@@ -99,6 +99,45 @@ describe('GET /api/steam/app-details (US-011)', () => {
   });
 });
 
+describe('GET /api/steam/search (US-022)', () => {
+  it('should return 400 when term is missing', async () => {
+    const res = await request(app).get('/api/steam/search');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/term/i);
+  });
+
+  it('should proxy to Steam storesearch and return candidates', async () => {
+    const storeResponse = {
+      total: 1,
+      items: [{ id: 271590, name: 'Grand Theft Auto V', tiny_image: 'img.jpg' }],
+    };
+    mockAxiosGet.mockResolvedValueOnce({ data: storeResponse });
+
+    const res = await request(app).get('/api/steam/search').query({ term: 'GTA V' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.candidates).toHaveLength(1);
+    expect(res.body.candidates[0]).toMatchObject({ appId: '271590', name: 'Grand Theft Auto V', imageUrl: 'img.jpg' });
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.stringContaining('storesearch'),
+      expect.objectContaining({ params: expect.objectContaining({ term: 'GTA V' }) }),
+    );
+  });
+
+  it('should return an empty candidates array when store returns no items', async () => {
+    mockAxiosGet.mockResolvedValueOnce({ data: { total: 0, items: [] } });
+    const res = await request(app).get('/api/steam/search').query({ term: 'zzz-no-match' });
+    expect(res.status).toBe(200);
+    expect(res.body.candidates).toEqual([]);
+  });
+
+  it('should forward upstream errors from storesearch', async () => {
+    mockAxiosGet.mockRejectedValueOnce(new Error('network error'));
+    const res = await request(app).get('/api/steam/search').query({ term: 'anything' });
+    expect(res.status).toBe(502);
+  });
+});
+
 describe('GET /api/steam/reviews/:appid (US-011)', () => {
   it('should proxy request to Steam reviews endpoint', async () => {
     const reviewsResponse = {

@@ -11,8 +11,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { GameLibraryService } from '../../core/services/game-library.service';
 import { SteamApiService } from '../../core/services/steam-api.service';
 import { StoreConnectionService } from '../../core/services/store-connection.service';
-import { Game } from '../../core/models/game.model';
-import { SteamConnectionConfig } from '../../core/models/store-connection.model';
+import { SteamCandidate } from '../../core/models/game.model';
 
 @Component({
   selector: 'app-game-detail',
@@ -91,7 +90,24 @@ import { SteamConnectionConfig } from '../../core/models/store-connection.model'
               <p class="loading-meta">Fetching metadata…</p>
             }
 
-            @if (!game()!.metadata && !metadataLoading()) {
+            @if (!isSteam() && hasCandidates() && !metadataLoading()) {
+              <div class="candidates-section">
+                <p class="candidates-label">
+                  <mat-icon class="inline-icon">search</mat-icon>
+                  Select the matching Steam game to load score and metadata:
+                </p>
+                @for (candidate of game()!.steamCandidates!; track candidate.appId) {
+                  <button class="candidate-item" (click)="confirmSteamMatch(candidate)">
+                    @if (candidate.imageUrl) {
+                      <img [src]="candidate.imageUrl" [alt]="candidate.name" class="candidate-thumb" />
+                    }
+                    <span>{{ candidate.name }}</span>
+                  </button>
+                }
+              </div>
+            }
+
+            @if (!game()!.metadata && !metadataLoading() && !hasCandidates()) {
               @if (isSteam()) {
                 <button mat-stroked-button (click)="fetchMetadata()">
                   <mat-icon>download</mat-icon>
@@ -146,6 +162,37 @@ import { SteamConnectionConfig } from '../../core/models/store-connection.model'
     .tags { display: flex; flex-wrap: wrap; gap: 6px; }
     .loading-meta { font-size: 13px; color: #888; }
     .no-metadata-note { font-size: 13px; color: #888; margin: 0; }
+    .candidates-section { display: flex; flex-direction: column; gap: 8px; }
+    .candidates-label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      color: #aaa;
+      margin: 0;
+    }
+    .candidate-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      cursor: pointer;
+      color: inherit;
+      font-size: 14px;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    .candidate-item:hover { background: rgba(255,255,255,0.1); }
+    .candidate-thumb {
+      width: 40px;
+      height: 30px;
+      object-fit: cover;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
     @media (min-width: 600px) {
       .detail-hero { flex-direction: row; }
       .hero-image { max-width: 460px; align-self: flex-start; }
@@ -160,38 +207,56 @@ export class GameDetailComponent implements OnInit {
   private readonly connectionSvc = inject(StoreConnectionService);
   private readonly destroyRef = inject(DestroyRef);
 
-  protected readonly game = signal<Game | undefined>(undefined);
-  protected readonly loading = signal(true);
+  /** Route param — initialised from snapshot so computed() can use it as a stable dependency. */
+  private readonly id = this.route.snapshot.paramMap.get('id') ?? '';
+
+  /** Reactive: auto-updates when the library signal changes (background fetches, candidate updates). */
+  protected readonly game = computed(() => this.librarySvc.games().find(g => g.id === this.id));
+  protected readonly loading = signal(false);
   protected readonly metadataLoading = signal(false);
-  protected readonly isSteam = computed(() => {
-    const g = this.game();
-    if (!g) return false;
-    return this.connectionSvc.getById(g.storeId)?.type === 'steam';
-  });
+
+  protected readonly isSteam = computed(() =>
+    this.connectionSvc.getById(this.game()?.storeId ?? '')?.type === 'steam',
+  );
+
+  protected readonly hasCandidates = computed(
+    () => (this.game()?.steamCandidates?.length ?? 0) > 0,
+  );
 
   ngOnInit(): void {
-    const id = this.route.snapshot.paramMap.get('id')!;
-    this.game.set(this.librarySvc.getById(id));
-    this.loading.set(false);
-
-    // Auto-fetch metadata if missing and game belongs to Steam
-    if (this.game() && !this.game()!.metadata) {
+    // Auto-fetch Steam metadata if missing (non-Steam is handled by background search)
+    if (this.game() && !this.game()!.metadata && this.isSteam()) {
       this.fetchMetadata();
     }
   }
 
   fetchMetadata(): void {
     const g = this.game();
-    if (!g) return;
-
-    const conn = this.connectionSvc.getById(g.storeId);
-    if (conn?.type !== 'steam') return;
+    if (!g || !this.isSteam()) return;
 
     this.metadataLoading.set(true);
     this.steamApi.getAppMetadata(g.appId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: metadata => {
         this.librarySvc.updateGameMetadata(g.id, metadata);
-        this.game.update(current => current ? { ...current, metadata } : current);
+        this.metadataLoading.set(false);
+      },
+      error: () => this.metadataLoading.set(false),
+    });
+  }
+
+  /** User confirmed a Steam candidate — fetch and apply metadata, store the match permanently. */
+  confirmSteamMatch(candidate: SteamCandidate): void {
+    const g = this.game();
+    if (!g) return;
+
+    this.steamApi.setConfirmedMatch(g.id, candidate.appId);
+    this.steamApi.clearCandidates(g.id);
+    this.librarySvc.clearGameCandidates(g.id);
+
+    this.metadataLoading.set(true);
+    this.steamApi.getAppMetadata(candidate.appId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: metadata => {
+        this.librarySvc.updateGameMetadata(g.id, metadata);
         this.metadataLoading.set(false);
       },
       error: () => this.metadataLoading.set(false),

@@ -8,7 +8,7 @@ import { GameDetailComponent } from './game-detail.component';
 import { GameLibraryService } from '../../core/services/game-library.service';
 import { SteamApiService } from '../../core/services/steam-api.service';
 import { StoreConnectionService } from '../../core/services/store-connection.service';
-import { Game } from '../../core/models/game.model';
+import { Game, SteamCandidate } from '../../core/models/game.model';
 
 const GAME_WITH_META: Game = {
   id: 'c1_440', appId: '440', storeId: 'c1', name: 'Team Fortress 2', hoursPlayed: 200,
@@ -28,24 +28,43 @@ const EPIC_GAME_NO_META: Game = {
   id: 'e1_Fortnite', appId: 'Fortnite', storeId: 'e1', name: 'Fortnite', hoursPlayed: 0,
 };
 
+const STEAM_CANDIDATES: SteamCandidate[] = [
+  { appId: '1691700', name: 'Fortnite (Steam)', imageUrl: 'cap.jpg' },
+  { appId: '9999', name: 'Fortnite Chapter 2', imageUrl: 'cap2.jpg' },
+];
+
+const EPIC_GAME_WITH_CANDIDATES: Game = {
+  ...EPIC_GAME_NO_META,
+  steamCandidates: STEAM_CANDIDATES,
+};
+
 describe('GameDetailComponent (US-004, US-005)', () => {
   let fixture: ComponentFixture<GameDetailComponent>;
 
   async function createComponent(game: Game | undefined, storeType: 'steam' | 'epic' = 'steam') {
+    const gamesSignal = signal<Game[]>(game ? [game] : []);
+
     const steamApiSpy = {
       getAppMetadata: vi.fn().mockReturnValue(
         of({ communityScore: 88, imageUrl: 'img.jpg', yearPublished: 2012, tags: ['Shooter'] }),
       ),
       getOwnedGames: vi.fn().mockReturnValue(of([])),
+      setConfirmedMatch: vi.fn(),
+      clearCandidates: vi.fn(),
     };
 
     const librarySvc = {
-      games: signal([]),
+      games: gamesSignal.asReadonly(),
       syncing: signal(false),
       error: signal(null),
       gameCount: signal(0),
       getById: vi.fn().mockReturnValue(game),
-      updateGameMetadata: vi.fn(),
+      updateGameMetadata: vi.fn((id: string, meta: Game['metadata']) => {
+        gamesSignal.update(gs => gs.map(g => g.id === id ? { ...g, metadata: meta } : g));
+      }),
+      clearGameCandidates: vi.fn((id: string) => {
+        gamesSignal.update(gs => gs.map(g => g.id === id ? { ...g, steamCandidates: undefined } : g));
+      }),
       syncAll: vi.fn().mockReturnValue(of([])),
       removeByConnection: vi.fn(),
     };
@@ -144,5 +163,52 @@ describe('GameDetailComponent (US-004, US-005)', () => {
   it('should NOT auto-fetch metadata for Epic game with no metadata (US-021)', async () => {
     const { steamApiSpy } = await createComponent(EPIC_GAME_NO_META, 'epic');
     expect(steamApiSpy.getAppMetadata).not.toHaveBeenCalled();
+  });
+
+  // ── US-022: candidate picker ─────────────────────────────────────────────
+
+  it('should show Steam candidates when game has steamCandidates (US-022)', async () => {
+    await createComponent(EPIC_GAME_WITH_CANDIDATES, 'epic');
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Fortnite (Steam)');
+    expect(text).toContain('Fortnite Chapter 2');
+  });
+
+  it('should NOT show "No Steam metadata available" note when candidates are present (US-022)', async () => {
+    await createComponent(EPIC_GAME_WITH_CANDIDATES, 'epic');
+    expect(fixture.nativeElement.textContent).not.toContain('No Steam metadata available for this game.');
+  });
+
+  it('should call confirmSteamMatch and fetch metadata on candidate click (US-022)', async () => {
+    const { steamApiSpy, librarySvc } = await createComponent(EPIC_GAME_WITH_CANDIDATES, 'epic');
+
+    const candidateButtons = fixture.nativeElement.querySelectorAll('button.candidate-item') as NodeListOf<HTMLButtonElement>;
+    expect(candidateButtons.length).toBe(2);
+
+    // Click first candidate
+    candidateButtons[0].click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(steamApiSpy.setConfirmedMatch).toHaveBeenCalledWith('e1_Fortnite', '1691700');
+    expect(steamApiSpy.clearCandidates).toHaveBeenCalledWith('e1_Fortnite');
+    expect(librarySvc.clearGameCandidates).toHaveBeenCalledWith('e1_Fortnite');
+    expect(steamApiSpy.getAppMetadata).toHaveBeenCalledWith('1691700');
+    expect(librarySvc.updateGameMetadata).toHaveBeenCalledWith('e1_Fortnite', expect.objectContaining({ communityScore: 88 }));
+  });
+
+  it('should display metadata after candidate is confirmed (US-022)', async () => {
+    await createComponent(EPIC_GAME_WITH_CANDIDATES, 'epic');
+
+    const candidateButtons = fixture.nativeElement.querySelectorAll('button.candidate-item') as NodeListOf<HTMLButtonElement>;
+    candidateButtons[0].click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // Score should now be visible
+    expect(fixture.nativeElement.textContent).toContain('88%');
+    // Candidates section should be gone
+    expect(fixture.nativeElement.textContent).not.toContain('Fortnite (Steam)');
   });
 });
