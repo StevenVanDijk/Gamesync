@@ -125,7 +125,7 @@ import { StoreType } from '../../../core/models/store-connection.model';
               <mat-icon class="info-icon">info</mat-icon>
               <span>
                 Click <strong>Open GOG Login</strong> to sign in to your GOG account.
-                After logging in, you will be redirected to gog.com. Copy the
+                After logging in, you will be redirected to embed.gog.com. Copy the
                 <code>code</code> value from the address bar and paste it below.
               </span>
             </p>

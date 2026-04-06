@@ -42,9 +42,11 @@ describe('GET /api/gog/auth-url (US-023)', () => {
     expect(res.body.url).toContain('46899977096215655');
   });
 
-  it('should include gog.com/on_login_success as redirect_uri', async () => {
+  it('should include embed.gog.com/on_login_success?origin=client as redirect_uri', async () => {
     const res = await request(app).get('/api/gog/auth-url');
-    expect(res.body.url).toContain(encodeURIComponent('https://www.gog.com/on_login_success'));
+    expect(res.body.url).toContain(
+      encodeURIComponent('https://embed.gog.com/on_login_success?origin=client'),
+    );
   });
 });
 

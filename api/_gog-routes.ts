@@ -24,7 +24,7 @@ export const gogRouter = Router();
 const GOG_CLIENT_ID = '46899977096215655';
 const GOG_CLIENT_SECRET =
   '9d85c43b1482497dbbce61f6e4aa173a433796eeae2ca8c5f6129f2dc4de46d9';
-const GOG_REDIRECT_URI = 'https://www.gog.com/on_login_success';
+const GOG_REDIRECT_URI = 'https://embed.gog.com/on_login_success?origin=client';
 
 const GOG_AUTH_BASE = 'https://login.gog.com/auth';
 const GOG_TOKEN_URL = 'https://auth.gog.com/token';
