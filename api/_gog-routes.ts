@@ -29,7 +29,6 @@ const GOG_REDIRECT_URI = 'https://embed.gog.com/on_login_success?origin=client';
 const GOG_AUTH_BASE = 'https://login.gog.com/auth';
 const GOG_TOKEN_URL = 'https://auth.gog.com/token';
 const GOG_EMBED_BASE = 'https://embed.gog.com';
-const GOG_STATS_BASE = 'https://www.gog.com/u';
 
 const UPSTREAM_TIMEOUT_MS = 8_000;
 
@@ -157,72 +156,62 @@ gogRouter.post('/refresh', async (req: Request, res: Response) => {
 /**
  * GET /api/gog/library
  * Returns the list of owned games for a GOG account.
- * Query: accessToken=<token>&username=<gog-username>
+ * Query: accessToken=<token>
+ *
+ * Uses embed.gog.com/account/getFilteredProducts (mediaType=1 = games).
+ * The username param is no longer required but kept for backwards compatibility.
  */
 gogRouter.get('/library', async (req: Request, res: Response) => {
-  const { accessToken, username } = req.query as {
-    accessToken?: string;
-    username?: string;
-  };
+  const { accessToken } = req.query as { accessToken?: string };
 
-  if (!accessToken || !username) {
-    res.status(400).json({ error: 'accessToken and username query params are required' });
+  if (!accessToken) {
+    res.status(400).json({ error: 'accessToken query param is required' });
     return;
   }
 
   const authHeader = `Bearer ${accessToken}`;
 
   try {
-    interface GogGameEntry {
-      game: {
-        id: string;
-        title: string;
-        /** Full image URL, e.g. https://images.gog-statics.com/<hash> */
-        image: string;
-        url?: string;
-      };
-      stats?: {
-        playtime?: number; // minutes
-        lastSession?: string;
-      } | null;
+    interface GogProduct {
+      id: number;
+      title: string;
+      /** Protocol-relative URL, e.g. //images-3.gog-statics.com/<hash>.jpg */
+      image: string;
     }
 
-    const games: GogGameEntry[] = [];
+    const products: GogProduct[] = [];
     let page = 1;
     let totalPages = 1;
 
     do {
       const { data } = await axios.get(
-        `${GOG_STATS_BASE}/${encodeURIComponent(username)}/games/stats`,
+        `${GOG_EMBED_BASE}/account/getFilteredProducts`,
         {
-          params: { sort: 'recent_playtime', order: 'desc', page },
+          params: { mediaType: 1, page },
           headers: { Authorization: authHeader },
           timeout: UPSTREAM_TIMEOUT_MS,
         },
       );
 
-      const items: GogGameEntry[] = data._embedded?.items ?? [];
-      games.push(...items);
-      totalPages = data.pages ?? 1;
+      const items: GogProduct[] = data.products ?? [];
+      products.push(...items);
+      totalPages = data.totalPages ?? 1;
       page++;
     } while (page <= totalPages);
 
-    const result = games.map(entry => {
-      const playtimeMinutes = entry.stats?.playtime ?? 0;
-      const hoursPlayed = Math.round((playtimeMinutes / 60) * 10) / 10;
-
-      // GOG returns a bare hash path; construct the card image URL.
-      const rawImage = entry.game.image ?? '';
+    const result = products.map(product => {
+      // GOG returns protocol-relative URLs (//images-3.gog-statics.com/...)
+      const rawImage = product.image ?? '';
       const imageUrl = rawImage
         ? rawImage.startsWith('http')
           ? rawImage
-          : `https://images.gog-statics.com${rawImage}`
+          : `https:${rawImage}`
         : undefined;
 
       return {
-        appId: entry.game.id,
-        name: entry.game.title,
-        hoursPlayed,
+        appId: String(product.id),
+        name: product.title,
+        hoursPlayed: 0,
         imageUrl,
       };
     });

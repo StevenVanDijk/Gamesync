@@ -80,9 +80,7 @@ export class GogApiService {
         this.logger.info(TAG, `GET library (username=${config.username})`);
         return this.http
           .get<{ games: LibraryGame[] }>(`${this.backendUrl}/library`, {
-            params: new HttpParams()
-              .set('accessToken', accessToken)
-              .set('username', config.username),
+            params: new HttpParams().set('accessToken', accessToken),
           })
           .pipe(
             map(res => {

@@ -88,7 +88,7 @@ describe('GogApiService (US-023)', () => {
 
       const req = httpMock.expectOne(r => r.url === `${TEST_BACKEND}/library`);
       expect(req.request.params.get('accessToken')).toBe('at_valid');
-      expect(req.request.params.get('username')).toBe('TestGogUser');
+      expect(req.request.params.has('username')).toBe(false);
 
       req.flush({
         games: [
@@ -132,7 +132,7 @@ describe('GogApiService (US-023)', () => {
         expiresAt: Date.now() + 3_600_000,
       });
 
-      // Then library call should use new token
+      // Then library call should use the refreshed token
       const libReq = httpMock.expectOne(r => r.url === `${TEST_BACKEND}/library`);
       expect(libReq.request.params.get('accessToken')).toBe('new_at');
       libReq.flush({ games: [] });

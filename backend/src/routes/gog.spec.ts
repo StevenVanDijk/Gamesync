@@ -156,81 +156,65 @@ describe('POST /api/gog/refresh (US-023)', () => {
 // ── GET /api/gog/library ─────────────────────────────────────────────────────
 
 describe('GET /api/gog/library (US-023)', () => {
-  it('should return 400 when accessToken or username is missing', async () => {
-    const res1 = await request(app).get('/api/gog/library');
-    expect(res1.status).toBe(400);
-
-    const res2 = await request(app).get('/api/gog/library').query({ accessToken: 'tok' });
-    expect(res2.status).toBe(400);
-
-    const res3 = await request(app).get('/api/gog/library').query({ username: 'user' });
-    expect(res3.status).toBe(400);
+  it('should return 400 when accessToken is missing', async () => {
+    const res = await request(app).get('/api/gog/library');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/accessToken/i);
   });
 
-  it('should fetch library and return games with playtime and imageUrl', async () => {
+  it('should fetch getFilteredProducts and return games with imageUrl', async () => {
     mockGet.mockResolvedValueOnce({
       data: {
-        pages: 1,
-        _embedded: {
-          items: [
-            {
-              game: { id: 'gog_1', title: 'Witcher 3', image: '/abc123' },
-              stats: { playtime: 120 },
-            },
-            {
-              game: { id: 'gog_2', title: 'Cyberpunk 2077', image: 'https://images.gog.com/xyz.jpg' },
-              stats: null,
-            },
-          ],
-        },
+        totalPages: 1,
+        products: [
+          { id: 1207659069, title: 'Witcher 3', image: '//images-3.gog-statics.com/abc123.jpg' },
+          { id: 1423049311, title: 'Cyberpunk 2077', image: 'https://images.gog.com/xyz.jpg' },
+        ],
       },
     });
 
     const res = await request(app)
       .get('/api/gog/library')
-      .query({ accessToken: 'tok', username: 'testuser' });
+      .query({ accessToken: 'tok' });
 
     expect(res.status).toBe(200);
     expect(res.body.games).toHaveLength(2);
 
     const witcher = res.body.games[0];
-    expect(witcher.appId).toBe('gog_1');
+    expect(witcher.appId).toBe('1207659069');
     expect(witcher.name).toBe('Witcher 3');
-    expect(witcher.hoursPlayed).toBe(2); // 120 min / 60
-    expect(witcher.imageUrl).toBe('https://images.gog-statics.com/abc123');
+    expect(witcher.hoursPlayed).toBe(0);
+    expect(witcher.imageUrl).toBe('https://images-3.gog-statics.com/abc123.jpg'); // https: prepended
 
     const cyber = res.body.games[1];
-    expect(cyber.appId).toBe('gog_2');
-    expect(cyber.hoursPlayed).toBe(0);
+    expect(cyber.appId).toBe('1423049311');
     expect(cyber.imageUrl).toBe('https://images.gog.com/xyz.jpg'); // full URL kept
 
     expect(mockGet).toHaveBeenCalledWith(
-      expect.stringContaining('gog.com/u/testuser/games/stats'),
-      expect.any(Object),
+      expect.stringContaining('embed.gog.com/account/getFilteredProducts'),
+      expect.objectContaining({
+        params: expect.objectContaining({ mediaType: 1, page: 1 }),
+      }),
     );
   });
 
   it('should paginate across multiple pages', async () => {
     mockGet.mockResolvedValueOnce({
       data: {
-        pages: 2,
-        _embedded: {
-          items: [{ game: { id: 'g1', title: 'Game One', image: '' }, stats: null }],
-        },
+        totalPages: 2,
+        products: [{ id: 1, title: 'Game One', image: '' }],
       },
     });
     mockGet.mockResolvedValueOnce({
       data: {
-        pages: 2,
-        _embedded: {
-          items: [{ game: { id: 'g2', title: 'Game Two', image: '' }, stats: null }],
-        },
+        totalPages: 2,
+        products: [{ id: 2, title: 'Game Two', image: '' }],
       },
     });
 
     const res = await request(app)
       .get('/api/gog/library')
-      .query({ accessToken: 'tok', username: 'user' });
+      .query({ accessToken: 'tok' });
 
     expect(res.status).toBe(200);
     expect(res.body.games).toHaveLength(2);
@@ -239,9 +223,7 @@ describe('GET /api/gog/library (US-023)', () => {
 
   it('should forward upstream errors', async () => {
     mockGet.mockRejectedValueOnce(new Error('network error'));
-    const res = await request(app)
-      .get('/api/gog/library')
-      .query({ accessToken: 'tok', username: 'user' });
+    const res = await request(app).get('/api/gog/library').query({ accessToken: 'tok' });
     expect(res.status).toBe(502);
   });
 });
