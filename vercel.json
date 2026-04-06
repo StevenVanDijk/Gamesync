@@ -4,6 +4,7 @@
   "rewrites": [
     { "source": "/api/steam/(.*)", "destination": "/api/steam" },
     { "source": "/api/epic/(.*)", "destination": "/api/epic" },
+    { "source": "/api/gog/(.*)", "destination": "/api/gog" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

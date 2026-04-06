@@ -12,6 +12,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { StoreConnectionService } from '../../../core/services/store-connection.service';
 import { EpicApiService } from '../../../core/services/epic-api.service';
+import { GogApiService } from '../../../core/services/gog-api.service';
 import { StoreType } from '../../../core/models/store-connection.model';
 
 @Component({
@@ -40,6 +41,7 @@ import { StoreType } from '../../../core/models/store-connection.model';
           <mat-select formControlName="type">
             <mat-option value="steam">Steam</mat-option>
             <mat-option value="epic">Epic Games</mat-option>
+            <mat-option value="gog">GOG</mat-option>
           </mat-select>
         </mat-form-field>
 
@@ -116,6 +118,44 @@ import { StoreType } from '../../../core/models/store-connection.model';
             <p class="epic-error">{{ epicError() }}</p>
           }
         }
+
+        @if (form.get('type')?.value === 'gog') {
+          <div class="epic-section">
+            <p class="epic-info">
+              <mat-icon class="info-icon">info</mat-icon>
+              <span>
+                Click <strong>Open GOG Login</strong> to sign in to your GOG account.
+                After logging in, you will be redirected to gog.com. Copy the
+                <code>code</code> value from the address bar and paste it below.
+              </span>
+            </p>
+
+            <button
+              type="button"
+              mat-stroked-button
+              color="accent"
+              class="epic-login-btn"
+              (click)="openGogLogin()"
+            >
+              <mat-icon>open_in_new</mat-icon>
+              Open GOG Login
+            </button>
+          </div>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Authorization code</mat-label>
+            <input
+              matInput
+              [(ngModel)]="gogCode"
+              [ngModelOptions]="{ standalone: true }"
+              placeholder="Paste the code from the GOG redirect URL"
+            />
+          </mat-form-field>
+
+          @if (gogError()) {
+            <p class="epic-error">{{ gogError() }}</p>
+          }
+        }
       </form>
     </mat-dialog-content>
 
@@ -133,6 +173,19 @@ import { StoreType } from '../../../core/models/store-connection.model';
             <mat-spinner diameter="20" class="btn-spinner"></mat-spinner>
           } @else {
             Connect with Epic
+          }
+        </button>
+      } @else if (form.get('type')?.value === 'gog') {
+        <button
+          mat-flat-button
+          color="accent"
+          (click)="connectGog()"
+          [disabled]="gogLoading() || !gogCode.trim()"
+        >
+          @if (gogLoading()) {
+            <mat-spinner diameter="20" class="btn-spinner"></mat-spinner>
+          } @else {
+            Connect with GOG
           }
         </button>
       } @else {
@@ -182,11 +235,16 @@ export class AddConnectionDialogComponent {
   private readonly dialogRef = inject(MatDialogRef<AddConnectionDialogComponent>);
   private readonly connectionSvc = inject(StoreConnectionService);
   private readonly epicApi = inject(EpicApiService);
+  private readonly gogApi = inject(GogApiService);
   private readonly destroyRef = inject(DestroyRef);
 
   epicLoading = signal(false);
   epicError = signal('');
   epicCode = '';
+
+  gogLoading = signal(false);
+  gogError = signal('');
+  gogCode = '';
 
   form = this.fb.group({
     type: ['steam' as StoreType, Validators.required],
@@ -214,6 +272,8 @@ export class AddConnectionDialogComponent {
       steamId.updateValueAndValidity();
       this.epicCode = '';
       this.epicError.set('');
+      this.gogCode = '';
+      this.gogError.set('');
     });
     this.form.get('type')!.updateValueAndValidity({ emitEvent: true });
   }
@@ -239,6 +299,41 @@ export class AddConnectionDialogComponent {
           '_blank',
           'noopener,noreferrer',
         );
+      },
+    });
+  }
+
+  openGogLogin(): void {
+    this.gogApi.getAuthUrl().subscribe({
+      next: url => window.open(url, '_blank', 'noopener,noreferrer'),
+      error: () => {
+        this.gogError.set('Failed to fetch GOG login URL. Please try again.');
+      },
+    });
+  }
+
+  connectGog(): void {
+    const code = this.gogCode.trim();
+    if (!code) return;
+    this.gogLoading.set(true);
+    this.gogError.set('');
+
+    this.gogApi.exchangeCode(code).subscribe({
+      next: tokens => {
+        this.connectionSvc.add('gog', tokens.username ?? 'GOG Account', {
+          userId: tokens.userId,
+          username: tokens.username,
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresAt: tokens.expiresAt,
+        });
+        this.gogLoading.set(false);
+        this.dialogRef.close(true);
+      },
+      error: err => {
+        this.gogLoading.set(false);
+        const detail = err?.error?.detail ?? err?.error?.error ?? err?.message ?? 'Unknown error';
+        this.gogError.set(`Failed to connect: ${detail}`);
       },
     });
   }

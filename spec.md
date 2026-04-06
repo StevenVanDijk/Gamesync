@@ -281,6 +281,22 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-023: GOG library connection
+**As a** user,
+**I want** to connect my GOG account so my GOG library is imported into Gamesync,
+**So that** I can see all my GOG games alongside Steam and Epic titles.
+
+**Acceptance criteria:**
+- [ ] User can add a GOG connection via the "Add store connection" dialog
+- [ ] Clicking "Open GOG Login" opens the GOG OAuth login page in a new tab
+- [ ] After logging in, user copies the `code` from the browser URL bar and pastes it into the dialog
+- [ ] The backend exchanges the code for an access + refresh token using GOG's public OAuth client
+- [ ] GOG games are fetched and displayed in the library with name, hours played, and cover image
+- [ ] The access token is refreshed automatically when expired
+- [ ] Since GOG provides playtime data, hours played is shown correctly (in hours, rounded to 1 decimal)
+
+---
+
 ### US-009: Successful build required
 **As a** developer,
 **I want** every change to produce a passing production build,

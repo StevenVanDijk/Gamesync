@@ -4,12 +4,14 @@ import { tap, catchError } from 'rxjs/operators';
 import { Game, SteamCandidate } from '../models/game.model';
 import {
   EpicConnectionConfig,
+  GogConnectionConfig,
   SteamConnectionConfig,
   StoreConnection,
 } from '../models/store-connection.model';
 import { StoreConnectionService } from './store-connection.service';
 import { SteamApiService } from './steam-api.service';
 import { EpicApiService } from './epic-api.service';
+import { GogApiService } from './gog-api.service';
 import { LoggingService } from './logging.service';
 
 const TAG = 'Gamesync';
@@ -22,6 +24,7 @@ export class GameLibraryService {
   private readonly connectionSvc = inject(StoreConnectionService);
   private readonly steamApi = inject(SteamApiService);
   private readonly epicApi = inject(EpicApiService);
+  private readonly gogApi = inject(GogApiService);
   private readonly logger = inject(LoggingService);
 
   private readonly _games = signal<Game[]>([]);
@@ -343,6 +346,13 @@ export class GameLibraryService {
       case 'epic':
         fetch$ = this.epicApi.getOwnedGames(
           conn.config as EpicConnectionConfig,
+          conn.id,
+          conn.id,
+        );
+        break;
+      case 'gog':
+        fetch$ = this.gogApi.getOwnedGames(
+          conn.config as GogConnectionConfig,
           conn.id,
           conn.id,
         );
