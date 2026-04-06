@@ -253,6 +253,18 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-021: Game detail view handles non-Steam games gracefully
+**As a** user,
+**I want** the game detail view to show an appropriate message for non-Steam games when no metadata is available,
+**So that** I am not shown a "Load metadata from Steam" button that silently does nothing.
+
+**Acceptance criteria:**
+- [ ] The "Load metadata from Steam" button is only shown for Steam games
+- [ ] For non-Steam games with no metadata, a static note "No Steam metadata available for this game." is shown instead
+- [ ] For non-Steam games that already have metadata (e.g. Epic cover image), neither the button nor the note is shown
+
+---
+
 ### US-009: Successful build required
 **As a** developer,
 **I want** every change to produce a passing production build,

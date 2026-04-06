@@ -1,4 +1,4 @@
-import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
@@ -67,11 +67,11 @@ import { SteamConnectionConfig } from '../../core/models/store-connection.model'
                 <div class="score-bar-row">
                   <mat-progress-bar
                     mode="determinate"
-                    [value]="game()!.metadata!.communityScore!"
-                    [color]="scoreColor(game()!.metadata!.communityScore!)"
+                    [value]="game()?.metadata?.communityScore ?? 0"
+                    [color]="scoreColor(game()?.metadata?.communityScore ?? 0)"
                     class="score-bar"
                   ></mat-progress-bar>
-                  <span class="score-value">{{ game()!.metadata!.communityScore }}%</span>
+                  <span class="score-value">{{ game()?.metadata?.communityScore }}%</span>
                 </div>
               </div>
             }
@@ -92,10 +92,14 @@ import { SteamConnectionConfig } from '../../core/models/store-connection.model'
             }
 
             @if (!game()!.metadata && !metadataLoading()) {
-              <button mat-stroked-button (click)="fetchMetadata()">
-                <mat-icon>download</mat-icon>
-                Load metadata from Steam
-              </button>
+              @if (isSteam()) {
+                <button mat-stroked-button (click)="fetchMetadata()">
+                  <mat-icon>download</mat-icon>
+                  Load metadata from Steam
+                </button>
+              } @else {
+                <p class="no-metadata-note">No Steam metadata available for this game.</p>
+              }
             }
           </div>
         </div>
@@ -141,6 +145,7 @@ import { SteamConnectionConfig } from '../../core/models/store-connection.model'
     .tags-section { display: flex; flex-direction: column; gap: 6px; }
     .tags { display: flex; flex-wrap: wrap; gap: 6px; }
     .loading-meta { font-size: 13px; color: #888; }
+    .no-metadata-note { font-size: 13px; color: #888; margin: 0; }
     @media (min-width: 600px) {
       .detail-hero { flex-direction: row; }
       .hero-image { max-width: 460px; align-self: flex-start; }
@@ -158,6 +163,11 @@ export class GameDetailComponent implements OnInit {
   protected readonly game = signal<Game | undefined>(undefined);
   protected readonly loading = signal(true);
   protected readonly metadataLoading = signal(false);
+  protected readonly isSteam = computed(() => {
+    const g = this.game();
+    if (!g) return false;
+    return this.connectionSvc.getById(g.storeId)?.type === 'steam';
+  });
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id')!;

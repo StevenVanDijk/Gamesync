@@ -24,6 +24,10 @@ const GAME_NO_META: Game = {
   id: 'c1_730', appId: '730', storeId: 'c1', name: 'CS2', hoursPlayed: 50,
 };
 
+const EPIC_GAME_NO_META: Game = {
+  id: 'e1_Fortnite', appId: 'Fortnite', storeId: 'e1', name: 'Fortnite', hoursPlayed: 0,
+};
+
 describe('GameDetailComponent (US-004, US-005)', () => {
   let fixture: ComponentFixture<GameDetailComponent>;
 
@@ -124,5 +128,21 @@ describe('GameDetailComponent (US-004, US-005)', () => {
   it('should show not-found message for unknown game id', async () => {
     await createComponent(undefined);
     expect(fixture.nativeElement.textContent).toContain('Game not found');
+  });
+
+  it('should NOT show "Load metadata from Steam" button for Epic game with no metadata (US-021)', async () => {
+    await createComponent(EPIC_GAME_NO_META, 'epic');
+    const btn = fixture.nativeElement.querySelector('button[mat-stroked-button]') as HTMLButtonElement | null;
+    expect(btn).toBeNull();
+  });
+
+  it('should show "No Steam metadata available" note for Epic game with no metadata (US-021)', async () => {
+    await createComponent(EPIC_GAME_NO_META, 'epic');
+    expect(fixture.nativeElement.textContent).toContain('No Steam metadata available for this game.');
+  });
+
+  it('should NOT auto-fetch metadata for Epic game with no metadata (US-021)', async () => {
+    const { steamApiSpy } = await createComponent(EPIC_GAME_NO_META, 'epic');
+    expect(steamApiSpy.getAppMetadata).not.toHaveBeenCalled();
   });
 });
