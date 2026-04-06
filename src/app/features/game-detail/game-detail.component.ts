@@ -43,7 +43,14 @@ import { SteamCandidate } from '../../core/models/game.model';
       } @else {
         <div class="detail-hero">
           @if (game()!.metadata?.imageUrl) {
-            <img [src]="game()!.metadata!.imageUrl" [alt]="game()!.name" class="hero-image" />
+            @if (steamStoreUrl()) {
+              <a [href]="steamStoreUrl()!" target="_blank" rel="noopener noreferrer" class="hero-image-link">
+                <img [src]="game()!.metadata!.imageUrl" [alt]="game()!.name" class="hero-image hero-image--clickable" />
+                <div class="hero-image-overlay"><mat-icon>open_in_new</mat-icon></div>
+              </a>
+            } @else {
+              <img [src]="game()!.metadata!.imageUrl" [alt]="game()!.name" class="hero-image" />
+            }
           }
           <div class="hero-info">
             <h1>{{ game()!.name }}</h1>
@@ -136,12 +143,41 @@ import { SteamCandidate } from '../../core/models/game.model';
     }
     .not-found mat-icon { font-size: 56px; width: 56px; height: 56px; }
     .detail-hero { display: flex; flex-direction: column; gap: 24px; }
+    .hero-image-link {
+      display: block;
+      position: relative;
+      width: 100%;
+      max-width: 460px;
+      border-radius: 8px;
+      overflow: hidden;
+      align-self: flex-start;
+    }
     .hero-image {
       width: 100%;
       max-width: 460px;
       border-radius: 8px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      display: block;
     }
+    .hero-image--clickable { max-width: 100%; border-radius: 0; }
+    .hero-image-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0);
+      transition: background 0.2s;
+      color: white;
+      opacity: 0;
+      transition: opacity 0.2s, background 0.2s;
+    }
+    .hero-image-overlay mat-icon { font-size: 36px; width: 36px; height: 36px; }
+    .hero-image-link:hover .hero-image-overlay {
+      opacity: 1;
+      background: rgba(0,0,0,0.45);
+    }
+    .hero-image-link:hover .hero-image--clickable { filter: brightness(0.85); }
     .hero-info { display: flex; flex-direction: column; gap: 12px; }
     h1 { margin: 0; font-size: 28px; }
     .meta-line {
@@ -222,6 +258,18 @@ export class GameDetailComponent implements OnInit {
   protected readonly hasCandidates = computed(
     () => (this.game()?.steamCandidates?.length ?? 0) > 0,
   );
+
+  /** Steam store URL when available — for Steam games, or non-Steam games with a confirmed match. */
+  protected readonly steamStoreUrl = computed(() => {
+    const g = this.game();
+    if (!g) return null;
+    // Steam game: appId is already the Steam appId
+    if (this.isSteam()) return `https://store.steampowered.com/app/${g.appId}/`;
+    // Non-Steam game: check for a confirmed Steam match
+    const matchedAppId = this.steamApi.getConfirmedMatch(g.id);
+    if (matchedAppId) return `https://store.steampowered.com/app/${matchedAppId}/`;
+    return null;
+  });
 
   ngOnInit(): void {
     // Auto-fetch Steam metadata if missing (non-Steam is handled by background search)

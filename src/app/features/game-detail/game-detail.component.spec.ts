@@ -51,6 +51,7 @@ describe('GameDetailComponent (US-004, US-005)', () => {
       getOwnedGames: vi.fn().mockReturnValue(of([])),
       setConfirmedMatch: vi.fn(),
       clearCandidates: vi.fn(),
+      getConfirmedMatch: vi.fn().mockReturnValue(null),
     };
 
     const librarySvc = {

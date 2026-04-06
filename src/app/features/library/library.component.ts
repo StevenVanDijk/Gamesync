@@ -101,11 +101,6 @@ type ViewMode = 'card' | 'compact' | 'list';
           <mat-spinner diameter="48"></mat-spinner>
           <p>Syncing library…</p>
         </div>
-      } @else if (librarySvc.error()) {
-        <div class="empty-state">
-          <mat-icon color="warn">error</mat-icon>
-          <p>{{ librarySvc.error() }}</p>
-        </div>
       } @else if (filteredGames().length === 0 && connectionSvc.connectionCount() === 0) {
         <div class="empty-state">
           <mat-icon>sports_esports</mat-icon>
@@ -281,6 +276,11 @@ export class LibraryComponent implements OnInit {
 
   sync(): void {
     this.librarySvc.syncAll().subscribe({
+      next: () => {
+        if (this.librarySvc.error()) {
+          this.snackBar.open('Some connections failed to sync. Check your settings.', 'Dismiss', { duration: 5000 });
+        }
+      },
       error: () => this.snackBar.open('Sync failed. Check your connection settings.', 'Dismiss', { duration: 5000 }),
     });
   }

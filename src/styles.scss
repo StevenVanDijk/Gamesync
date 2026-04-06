@@ -23,3 +23,27 @@ a {
   text-decoration: none;
 }
 
+/* ── Material select panel / dropdown ───────────────────────────────────────
+   The overlay panel renders outside the component shadow, so it needs a
+   global rule. Force a solid dark background so options are readable on
+   the dark app background.
+   ─────────────────────────────────────────────────────────────────────── */
+.mat-mdc-select-panel,
+.mdc-menu-surface.mat-mdc-select-panel {
+  background-color: #1e1e1e !important;
+}
+
+.mat-mdc-option {
+  background-color: #1e1e1e;
+  color: #e0e0e0;
+}
+
+.mat-mdc-option:hover:not(.mat-mdc-option-disabled),
+.mat-mdc-option.mat-mdc-option-active {
+  background-color: #2a2a2a;
+}
+
+.mat-mdc-option.mdc-list-item--selected:not(.mat-mdc-option-multiple) {
+  background-color: #2a2a2a;
+}
+

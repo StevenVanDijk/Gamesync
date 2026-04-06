@@ -40,7 +40,13 @@ export class GameLibraryService {
 
   readonly gameCount = computed(() => this._games().length);
 
-  /** Aggregate all games from every configured store connection. */
+  /** Aggregate all games from every configured store connection.
+   *
+   * Each connection is fetched independently — a failure on one does not
+   * prevent the others from completing.  Games from successful connections
+   * are merged into the existing library (update in-place or append); games
+   * that belong to a connection that errored are left untouched.
+   */
   syncAll(): Observable<Game[]> {
     const connections = this.connectionSvc.connections();
     if (connections.length === 0) {
@@ -55,28 +61,62 @@ export class GameLibraryService {
     this._syncing.set(true);
     this._error.set(null);
 
-    const fetches = connections.map(c => this.fetchForConnection(c));
+    // Wrap each fetch so a single connection failure yields null instead of
+    // propagating and aborting the entire forkJoin.
+    const fetches = connections.map(c =>
+      this.fetchForConnection(c).pipe(
+        catchError(err => {
+          this.logger.error(
+            TAG,
+            `"${c.label}" (${c.type}) sync failed — skipping: ${err?.message ?? err}`,
+            err,
+          );
+          return of(null as Game[] | null);
+        }),
+      ),
+    );
 
     return forkJoin(fetches).pipe(
       tap({
         next: results => {
-          const allGames = results.flat();
+          const successfulIds = new Set(
+            connections
+              .filter((_, i) => results[i] !== null)
+              .map(c => c.id),
+          );
+          const freshGames = (results.filter(r => r !== null) as Game[][]).flat();
+
           this.logger.info(
             TAG,
-            `syncAll complete — ${allGames.length} game(s) across ${connections.length} connection(s)`,
+            `syncAll complete — ${freshGames.length} game(s) from ${successfulIds.size}/${connections.length} connection(s)`,
           );
-          this._games.set(allGames);
+
+          // Merge: keep games from failed connections, update/add from successful ones.
+          this._games.update(existing => {
+            const merged = existing.filter(g => !successfulIds.has(g.storeId));
+            return [...merged, ...freshGames];
+          });
+
+          const failedCount = connections.length - successfulIds.size;
+          this._error.set(failedCount > 0
+            ? `${failedCount} connection${failedCount > 1 ? 's' : ''} failed to sync`
+            : null);
+
           this._syncing.set(false);
-          this.backgroundFetchMetadata(allGames);
+          this.backgroundFetchMetadata(freshGames);
         },
         error: err => {
+          // Should not reach here since each fetch catches its own errors.
           const msg = err?.message ?? 'Sync failed';
-          this.logger.error(TAG, `syncAll failed: ${msg}`, err);
+          this.logger.error(TAG, `syncAll unexpected error: ${msg}`, err);
           this._error.set(msg);
           this._syncing.set(false);
         },
       }),
-      switchMap(results => of(results.flat())),
+      switchMap(results => {
+        const allFresh = (results.filter(r => r !== null) as Game[][]).flat();
+        return of(allFresh);
+      }),
     );
   }
 
@@ -365,14 +405,6 @@ export class GameLibraryService {
       tap(games =>
         this.logger.info(TAG, `"${conn.label}" → ${games.length} game(s)`),
       ),
-      catchError(err => {
-        this.logger.error(
-          TAG,
-          `"${conn.label}" (${conn.type}) fetch failed: ${err?.message ?? err}`,
-          err,
-        );
-        throw err;
-      }),
     );
   }
 }

@@ -305,3 +305,51 @@ This file contains user stories for the Gamesync project. Every change must be r
 **Acceptance criteria:**
 - [ ] The project has a production build configuration (`ng build`)
 - [ ] The build completes without errors before a change is considered done
+
+---
+
+### US-024: Dropdown styling
+**As a** user,
+**I want** all dropdown menus to have a solid dark background,
+**So that** options are readable against the dark app theme.
+
+**Acceptance criteria:**
+- [ ] Sort-by dropdown in the library has a solid dark background
+- [ ] All `mat-select` panels across the app use a consistent dark background
+- [ ] Selected and hovered options are visually distinct
+
+---
+
+### US-025: Persist games across syncs
+**As a** user,
+**I want** my game library to persist between syncs and be updated incrementally,
+**So that** a sync that partially fails doesn't wipe out games I've already loaded.
+
+**Acceptance criteria:**
+- [ ] Games from a previous sync remain visible while a new sync is in progress
+- [ ] After a successful sync, games from that connection are replaced with the fresh list
+- [ ] Games from connections that errored during sync are left unchanged
+
+---
+
+### US-026: Non-fatal connection errors during sync
+**As a** user,
+**I want** a failing store connection to not block the rest of my sync,
+**So that** I still see games from my working connections even if one fails.
+
+**Acceptance criteria:**
+- [ ] If one connection fails, games from other connections are still fetched and shown
+- [ ] A snackbar informs the user that some connections failed
+- [ ] Games already loaded from the failed connection remain visible
+
+---
+
+### US-027: Open Steam store page from game details
+**As a** user,
+**I want** to click a game's cover image in the detail view to open its Steam store page,
+**So that** I can quickly visit the store page to read reviews or buy DLC.
+
+**Acceptance criteria:**
+- [ ] Clicking the cover image opens the Steam store page in a new tab
+- [ ] The link is only shown/active when a Steam store URL is available
+- [ ] A visible cursor and hover effect indicate the image is clickable
