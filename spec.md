@@ -371,3 +371,4 @@ This file contains user stories for the Gamesync project. Every change must be r
 - [ ] Where a CSV game matches an existing library game, `hoursPlayed` is set to `max(existing, csv)`; the existing game (with its metadata) is kept
 - [ ] Where a CSV game has no matching library game it is added as a new entry tagged with its `source`
 - [ ] The SAS URL is stored in the connection config; no server-side secret is required
+- [ ] Playnite CSV exports are supported: the backend detects the `#TYPE` comment, converts `Playtime` from seconds to hours, and ignores extra columns (`ReleaseDate`, `IsInstalled`)

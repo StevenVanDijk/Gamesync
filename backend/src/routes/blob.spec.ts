@@ -110,4 +110,40 @@ describe('GET /api/blob/library (US-028)', () => {
     const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
     expect(res.status).toBe(403);
   });
+
+  it('should parse a Playnite export and convert playtime from seconds to hours', async () => {
+    const csv = [
+      '#TYPE Selected.Playnite.SDK.Models.Game',
+      '"Name","Source","ReleaseDate","Playtime","IsInstalled"',
+      '"Team Fortress 2","Steam","15/01/2007","432000","True"',
+      '"The Witcher 3","GOG","26/05/2015","7200","False"',
+      '"[REDACTED]","Epic",,"0","False"',
+    ].join('\n');
+    mockGet.mockResolvedValueOnce({ data: csv });
+
+    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    expect(res.status).toBe(200);
+    expect(res.body.games).toHaveLength(3);
+    // 432000 s ÷ 3600 = 120 h
+    expect(res.body.games[0]).toMatchObject({ name: 'Team Fortress 2', source: 'steam', hoursPlayed: 120 });
+    // 7200 s ÷ 3600 = 2 h
+    expect(res.body.games[1]).toMatchObject({ name: 'The Witcher 3', source: 'gog', hoursPlayed: 2 });
+    // 0 s = 0 h; empty release date field handled correctly
+    expect(res.body.games[2]).toMatchObject({ name: '[REDACTED]', source: 'epic', hoursPlayed: 0 });
+  });
+
+  it('should handle Playnite export with leading space in name', async () => {
+    const csv = [
+      '#TYPE Selected.Playnite.SDK.Models.Game',
+      '"Name","Source","Playtime"',
+      '" Wanba Warriors","Steam","3600"',
+    ].join('\n');
+    mockGet.mockResolvedValueOnce({ data: csv });
+
+    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    expect(res.status).toBe(200);
+    // Leading space inside quotes is trimmed by the parser
+    expect(res.body.games[0].name).toBe('Wanba Warriors');
+    expect(res.body.games[0].hoursPlayed).toBe(1);
+  });
 });

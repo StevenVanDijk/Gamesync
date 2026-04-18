@@ -4,10 +4,16 @@
  * The client supplies a pre-signed SAS URL.  The backend fetches the CSV,
  * parses it, and returns a normalised game list.  No secrets live server-side.
  *
- * CSV format (header row required):
- *   name,source,playtime
- *   Team Fortress 2,steam,120.5
- *   The Witcher 3,gog,34
+ * Supported formats:
+ *
+ * 1. Simple CSV (playtime in hours):
+ *      name,source,playtime
+ *      Team Fortress 2,steam,120.5
+ *
+ * 2. Playnite export (playtime in seconds, #TYPE comment before headers):
+ *      #TYPE Selected.Playnite.SDK.Models.Game
+ *      "Name","Source","ReleaseDate","Playtime","IsInstalled"
+ *      "Team Fortress 2","Steam","15/01/2007","432000","True"
  */
 
 import { Router, Request, Response } from 'express';
@@ -38,17 +44,33 @@ function forwardError(res: Response, err: unknown): void {
   }
 }
 
-/**
- * Parse a CSV string into an array of row objects.
- * Handles quoted fields (RFC 4180 subset), comma and semicolon separators.
- */
-function parseCsv(text: string): Record<string, string>[] {
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-  const nonEmpty = lines.filter(l => l.trim().length > 0);
-  if (nonEmpty.length < 2) return [];
+interface ParseResult {
+  rows: Record<string, string>[];
+  /** True when the source is a Playnite export; playtime values are in seconds. */
+  playtimeInSeconds: boolean;
+}
 
-  // Auto-detect delimiter from header row
-  const header = nonEmpty[0];
+/**
+ * Parse a CSV string into row objects.
+ * Handles quoted fields (RFC 4180 subset), comma and semicolon separators,
+ * and Playnite-style #TYPE comment lines before the header.
+ */
+function parseCsv(text: string): ParseResult {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+
+  // Detect Playnite export by its #TYPE directive
+  const playtimeInSeconds = lines.some(l => l.trim().startsWith('#TYPE'));
+
+  // Skip comment/directive lines (starting with #) and blank lines
+  const dataLines = lines.filter(l => {
+    const t = l.trim();
+    return t.length > 0 && !t.startsWith('#');
+  });
+
+  if (dataLines.length < 2) return { rows: [], playtimeInSeconds };
+
+  // Auto-detect delimiter from the header row
+  const header = dataLines[0];
   const delimiter = header.includes(';') ? ';' : ',';
 
   const parseRow = (line: string): string[] => {
@@ -74,13 +96,14 @@ function parseCsv(text: string): Record<string, string>[] {
   const headers = parseRow(header).map(h => h.toLowerCase().trim());
   const rows: Record<string, string>[] = [];
 
-  for (let i = 1; i < nonEmpty.length; i++) {
-    const values = parseRow(nonEmpty[i]);
+  for (let i = 1; i < dataLines.length; i++) {
+    const values = parseRow(dataLines[i]);
     const row: Record<string, string> = {};
     headers.forEach((h, idx) => { row[h] = values[idx] ?? ''; });
     rows.push(row);
   }
-  return rows;
+
+  return { rows, playtimeInSeconds };
 }
 
 /**
@@ -109,13 +132,14 @@ blobRouter.get('/library', async (req: Request, res: Response) => {
       timeout: UPSTREAM_TIMEOUT_MS,
     });
 
-    const rows = parseCsv(data);
+    const { rows, playtimeInSeconds } = parseCsv(data);
 
     const games = rows
       .filter(r => r['name']?.trim())
       .map(r => {
         const rawPlaytime = r['playtime'] ?? r['hours'] ?? r['hours played'] ?? '0';
-        const hoursPlayed = Math.max(0, parseFloat(rawPlaytime) || 0);
+        let hoursPlayed = Math.max(0, parseFloat(rawPlaytime) || 0);
+        if (playtimeInSeconds) hoursPlayed = hoursPlayed / 3600;
         return {
           name: r['name'].trim(),
           source: (r['source'] ?? r['store'] ?? '').toLowerCase().trim(),
