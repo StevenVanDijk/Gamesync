@@ -24,24 +24,24 @@ const GAME_NO_META: Game = {
   id: 'c1_730', appId: '730', storeId: 'c1', name: 'CS2', hoursPlayed: 50,
 };
 
-const EPIC_GAME_NO_META: Game = {
-  id: 'e1_Fortnite', appId: 'Fortnite', storeId: 'e1', name: 'Fortnite', hoursPlayed: 0,
+const GOG_GAME_NO_META: Game = {
+  id: 'g1_1207659069', appId: '1207659069', storeId: 'g1', name: 'The Witcher 3', hoursPlayed: 5,
 };
 
 const STEAM_CANDIDATES: SteamCandidate[] = [
-  { appId: '1691700', name: 'Fortnite (Steam)', imageUrl: 'cap.jpg' },
-  { appId: '9999', name: 'Fortnite Chapter 2', imageUrl: 'cap2.jpg' },
+  { appId: '292030', name: 'The Witcher 3: Wild Hunt', imageUrl: 'cap.jpg' },
+  { appId: '9999', name: 'The Witcher 3 GOTY', imageUrl: 'cap2.jpg' },
 ];
 
-const EPIC_GAME_WITH_CANDIDATES: Game = {
-  ...EPIC_GAME_NO_META,
+const GOG_GAME_WITH_CANDIDATES: Game = {
+  ...GOG_GAME_NO_META,
   steamCandidates: STEAM_CANDIDATES,
 };
 
 describe('GameDetailComponent (US-004, US-005)', () => {
   let fixture: ComponentFixture<GameDetailComponent>;
 
-  async function createComponent(game: Game | undefined, storeType: 'steam' | 'epic' = 'steam') {
+  async function createComponent(game: Game | undefined, storeType: 'steam' | 'gog' = 'steam') {
     const gamesSignal = signal<Game[]>(game ? [game] : []);
 
     const steamApiSpy = {
@@ -150,56 +150,55 @@ describe('GameDetailComponent (US-004, US-005)', () => {
     expect(fixture.nativeElement.textContent).toContain('Game not found');
   });
 
-  it('should NOT show "Load metadata from Steam" button for Epic game with no metadata (US-021)', async () => {
-    await createComponent(EPIC_GAME_NO_META, 'epic');
+  it('should NOT show "Load metadata from Steam" button for GOG game with no metadata (US-021)', async () => {
+    await createComponent(GOG_GAME_NO_META, 'gog');
     const btn = fixture.nativeElement.querySelector('button[mat-stroked-button]') as HTMLButtonElement | null;
     expect(btn).toBeNull();
   });
 
-  it('should show "No Steam metadata available" note for Epic game with no metadata (US-021)', async () => {
-    await createComponent(EPIC_GAME_NO_META, 'epic');
+  it('should show "No Steam metadata available" note for GOG game with no metadata (US-021)', async () => {
+    await createComponent(GOG_GAME_NO_META, 'gog');
     expect(fixture.nativeElement.textContent).toContain('No Steam metadata available for this game.');
   });
 
-  it('should NOT auto-fetch metadata for Epic game with no metadata (US-021)', async () => {
-    const { steamApiSpy } = await createComponent(EPIC_GAME_NO_META, 'epic');
+  it('should NOT auto-fetch metadata for GOG game with no metadata (US-021)', async () => {
+    const { steamApiSpy } = await createComponent(GOG_GAME_NO_META, 'gog');
     expect(steamApiSpy.getAppMetadata).not.toHaveBeenCalled();
   });
 
   // ── US-022: candidate picker ─────────────────────────────────────────────
 
   it('should show Steam candidates when game has steamCandidates (US-022)', async () => {
-    await createComponent(EPIC_GAME_WITH_CANDIDATES, 'epic');
+    await createComponent(GOG_GAME_WITH_CANDIDATES, 'gog');
     const text = fixture.nativeElement.textContent as string;
-    expect(text).toContain('Fortnite (Steam)');
-    expect(text).toContain('Fortnite Chapter 2');
+    expect(text).toContain('The Witcher 3: Wild Hunt');
+    expect(text).toContain('The Witcher 3 GOTY');
   });
 
   it('should NOT show "No Steam metadata available" note when candidates are present (US-022)', async () => {
-    await createComponent(EPIC_GAME_WITH_CANDIDATES, 'epic');
+    await createComponent(GOG_GAME_WITH_CANDIDATES, 'gog');
     expect(fixture.nativeElement.textContent).not.toContain('No Steam metadata available for this game.');
   });
 
   it('should call confirmSteamMatch and fetch metadata on candidate click (US-022)', async () => {
-    const { steamApiSpy, librarySvc } = await createComponent(EPIC_GAME_WITH_CANDIDATES, 'epic');
+    const { steamApiSpy, librarySvc } = await createComponent(GOG_GAME_WITH_CANDIDATES, 'gog');
 
     const candidateButtons = fixture.nativeElement.querySelectorAll('button.candidate-item') as NodeListOf<HTMLButtonElement>;
     expect(candidateButtons.length).toBe(2);
 
-    // Click first candidate
     candidateButtons[0].click();
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(steamApiSpy.setConfirmedMatch).toHaveBeenCalledWith('e1_Fortnite', '1691700');
-    expect(steamApiSpy.clearCandidates).toHaveBeenCalledWith('e1_Fortnite');
-    expect(librarySvc.clearGameCandidates).toHaveBeenCalledWith('e1_Fortnite');
-    expect(steamApiSpy.getAppMetadata).toHaveBeenCalledWith('1691700');
-    expect(librarySvc.updateGameMetadata).toHaveBeenCalledWith('e1_Fortnite', expect.objectContaining({ communityScore: 88 }));
+    expect(steamApiSpy.setConfirmedMatch).toHaveBeenCalledWith('g1_1207659069', '292030');
+    expect(steamApiSpy.clearCandidates).toHaveBeenCalledWith('g1_1207659069');
+    expect(librarySvc.clearGameCandidates).toHaveBeenCalledWith('g1_1207659069');
+    expect(steamApiSpy.getAppMetadata).toHaveBeenCalledWith('292030');
+    expect(librarySvc.updateGameMetadata).toHaveBeenCalledWith('g1_1207659069', expect.objectContaining({ communityScore: 88 }));
   });
 
   it('should display metadata after candidate is confirmed (US-022)', async () => {
-    await createComponent(EPIC_GAME_WITH_CANDIDATES, 'epic');
+    await createComponent(GOG_GAME_WITH_CANDIDATES, 'gog');
 
     const candidateButtons = fixture.nativeElement.querySelectorAll('button.candidate-item') as NodeListOf<HTMLButtonElement>;
     candidateButtons[0].click();
@@ -207,9 +206,7 @@ describe('GameDetailComponent (US-004, US-005)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    // Score should now be visible
     expect(fixture.nativeElement.textContent).toContain('88%');
-    // Candidates section should be gone
-    expect(fixture.nativeElement.textContent).not.toContain('Fortnite (Steam)');
+    expect(fixture.nativeElement.textContent).not.toContain('The Witcher 3: Wild Hunt');
   });
 });

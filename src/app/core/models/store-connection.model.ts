@@ -1,21 +1,8 @@
-export type StoreType = 'steam' | 'epic' | 'gog';
+export type StoreType = 'steam' | 'gog';
 
 export interface SteamConnectionConfig {
   apiKey: string;
   steamId: string;
-}
-
-export interface EpicConnectionConfig {
-  /** Epic account ID returned after OAuth. */
-  accountId: string;
-  /** Display name of the connected Epic account. */
-  displayName?: string;
-  /** OAuth access token (may expire; refresh using refreshToken). */
-  accessToken: string;
-  /** OAuth refresh token for renewing the access token. */
-  refreshToken: string;
-  /** Unix timestamp (ms) when the access token expires. */
-  expiresAt: number;
 }
 
 export interface GogConnectionConfig {
@@ -31,7 +18,7 @@ export interface GogConnectionConfig {
   expiresAt: number;
 }
 
-export type ConnectionConfig = SteamConnectionConfig | EpicConnectionConfig | GogConnectionConfig;
+export type ConnectionConfig = SteamConnectionConfig | GogConnectionConfig;
 
 export interface StoreConnection {
   id: string;

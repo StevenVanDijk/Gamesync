@@ -8,7 +8,7 @@
 const MANIFEST = {
   name: 'Gamesync',
   short_name: 'Gamesync',
-  description: 'Your unified game library — connect Steam, Epic and more.',
+  description: 'Your unified game library — connect Steam, GOG and more.',
   display: 'standalone',
   background_color: '#121212',
   theme_color: '#3f51b5',

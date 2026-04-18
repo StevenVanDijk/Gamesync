@@ -1,20 +1,15 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatSelectModule } from '@angular/material/select';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatExpansionModule } from '@angular/material/expansion';
 import { StoreConnectionService } from '../../core/services/store-connection.service';
 import { GameLibraryService } from '../../core/services/game-library.service';
 import {
-  EpicConnectionConfig,
+  GogConnectionConfig,
   SteamConnectionConfig,
   StoreConnection,
   StoreType,
@@ -26,18 +21,12 @@ import { AddConnectionDialogComponent } from './add-connection-dialog/add-connec
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
-    ReactiveFormsModule,
     MatButtonModule,
     MatCardModule,
     MatDialogModule,
     MatIconModule,
-    MatInputModule,
-    MatFormFieldModule,
-    MatSelectModule,
     MatDividerModule,
     MatSnackBarModule,
-    MatExpansionModule,
   ],
   template: `
     <div class="connections-container">
@@ -74,10 +63,10 @@ import { AddConnectionDialogComponent } from './add-connection-dialog/add-connec
                     {{ maskKey(steamCfg(conn).apiKey) }}
                   </p>
                 }
-                @if (conn.type === 'epic') {
+                @if (conn.type === 'gog') {
                   <p class="detail-line">
                     <strong>Account:</strong>
-                    {{ epicCfg(conn).displayName ?? epicCfg(conn).accountId }}
+                    {{ gogCfg(conn).username }}
                   </p>
                 }
                 @if (conn.lastSyncedAt) {
@@ -147,8 +136,8 @@ export class ConnectionsComponent {
     return conn.config as SteamConnectionConfig;
   }
 
-  epicCfg(conn: StoreConnection): EpicConnectionConfig {
-    return conn.config as EpicConnectionConfig;
+  gogCfg(conn: StoreConnection): GogConnectionConfig {
+    return conn.config as GogConnectionConfig;
   }
 
   maskKey(key: string): string {
@@ -161,6 +150,6 @@ export class ConnectionsComponent {
   }
 
   storeLabel(type: StoreType): string {
-    return type === 'steam' ? 'Steam' : 'Epic Games';
+    return type === 'steam' ? 'Steam' : 'GOG';
   }
 }

@@ -26,12 +26,5 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/logs/logs.component').then(m => m.LogsComponent),
   },
-  {
-    path: 'epic-callback',
-    loadComponent: () =>
-      import('./features/epic-callback/epic-callback.component').then(
-        m => m.EpicCallbackComponent,
-      ),
-  },
   { path: '**', redirectTo: 'library' },
 ];

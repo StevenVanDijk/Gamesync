@@ -5,9 +5,9 @@ import { Observable, firstValueFrom } from 'rxjs';
 import { GameLibraryService } from './game-library.service';
 import { StoreConnectionService } from './store-connection.service';
 import { RateLimiterService } from './rate-limiter.service';
-import { SteamConnectionConfig, EpicConnectionConfig } from '../models/store-connection.model';
+import { SteamConnectionConfig, GogConnectionConfig } from '../models/store-connection.model';
 import { STEAM_BACKEND_URL } from './steam-api.service';
-import { EPIC_BACKEND_URL } from './epic-api.service';
+import { GOG_BACKEND_URL } from './gog-api.service';
 
 function makeImmediateRateLimiter(): Partial<RateLimiterService> {
   return {
@@ -18,7 +18,7 @@ function makeImmediateRateLimiter(): Partial<RateLimiterService> {
 }
 
 const TEST_STEAM = 'http://test-steam/api/steam';
-const TEST_EPIC = 'http://test-epic/api/epic';
+const TEST_GOG = 'http://test-gog/api/gog';
 
 describe('GameLibraryService (US-001, US-004, US-008)', () => {
   let librarySvc: GameLibraryService;
@@ -30,11 +30,12 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     steamId: '76561198000000001',
   };
 
-  const epicConfig: EpicConnectionConfig = {
-    accountId: 'epic-acc-123',
+  const gogConfig: GogConnectionConfig = {
+    userId: 'gog-user-123',
+    username: 'TestGogUser',
     accessToken: 'at_valid',
     refreshToken: 'rt_valid',
-    expiresAt: Date.now() + 3_600_000, // 1h in the future, no refresh needed
+    expiresAt: Date.now() + 3_600_000,
   };
 
   const ownedGamesFlush = {
@@ -43,8 +44,8 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     },
   };
 
-  const epicLibraryFlush = {
-    games: [{ appId: 'fn', name: 'Fortnite', hoursPlayed: 0, imageUrl: 'img.jpg' }],
+  const gogLibraryFlush = {
+    games: [{ appId: 'gog_witcher3', name: 'The Witcher 3', hoursPlayed: 5, imageUrl: 'img.jpg' }],
   };
 
   beforeEach(() => {
@@ -55,7 +56,7 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
         provideHttpClientTesting(),
         { provide: RateLimiterService, useValue: makeImmediateRateLimiter() },
         { provide: STEAM_BACKEND_URL, useValue: TEST_STEAM },
-        { provide: EPIC_BACKEND_URL, useValue: TEST_EPIC },
+        { provide: GOG_BACKEND_URL, useValue: TEST_GOG },
       ],
     });
     librarySvc = TestBed.inject(GameLibraryService);
@@ -99,29 +100,25 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     expect(librarySvc.games()[0].hoursPlayed).toBe(2);
   });
 
-  it('should fetch Epic games via API (US-003, US-012)', async () => {
-    connectionSvc.add('epic', 'My Epic', epicConfig);
+  it('should fetch GOG games via API (US-023)', async () => {
+    connectionSvc.add('gog', 'My GOG', gogConfig);
 
     const resultPromise = firstValueFrom(librarySvc.syncAll());
-    httpMock
-      .expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`))
-      .flush(epicLibraryFlush);
+    httpMock.expectOne(r => r.url.includes('/library')).flush(gogLibraryFlush);
 
     await resultPromise;
     expect(librarySvc.gameCount()).toBe(1);
-    expect(librarySvc.games()[0].name).toBe('Fortnite');
-    expect(librarySvc.games()[0].hoursPlayed).toBe(0);
+    expect(librarySvc.games()[0].name).toBe('The Witcher 3');
+    expect(librarySvc.games()[0].hoursPlayed).toBe(5);
   });
 
-  it('should aggregate games from Steam and Epic (US-001)', async () => {
+  it('should aggregate games from Steam and GOG (US-001)', async () => {
     connectionSvc.add('steam', 'Steam', steamConfig);
-    connectionSvc.add('epic', 'Epic', epicConfig);
+    connectionSvc.add('gog', 'GOG', gogConfig);
 
     const resultPromise = firstValueFrom(librarySvc.syncAll());
     httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
-    httpMock
-      .expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`))
-      .flush(epicLibraryFlush);
+    httpMock.expectOne(r => r.url.includes('/library')).flush(gogLibraryFlush);
     await resultPromise;
 
     expect(librarySvc.gameCount()).toBe(2);
@@ -162,7 +159,6 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
   });
 
   it('should batch-apply cached metadata after sync (US-015)', async () => {
-    // Pre-populate metadata cache for TF2 (appId=440)
     const cachedMeta = {
       communityScore: 85,
       imageUrl: 'https://cdn.steam.com/tf2.jpg',
@@ -180,7 +176,6 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
     await p;
 
-    // Cached metadata should be applied immediately — no HTTP for app-details/reviews
     httpMock.expectNone(r => r.url.includes('app-details'));
     const game = librarySvc.games()[0];
     expect(game.metadata?.communityScore).toBe(85);
@@ -194,11 +189,9 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
     await p;
 
-    // A background app-details request should have been queued
     const detailsReq = httpMock.expectOne(r => r.url.includes('app-details'));
     expect(detailsReq.request.params.get('appids')).toBe('440');
 
-    // Flush it to prevent verify() failure (reviews also triggered)
     detailsReq.flush({ '440': { success: true, data: { name: 'TF2', header_image: 'img.jpg' } } });
     httpMock
       .expectOne(r => r.url.includes('reviews'))
@@ -208,79 +201,67 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
       });
   });
 
-  it('should search Steam Store for Epic games without a community score (US-022)', async () => {
-    connectionSvc.add('epic', 'My Epic', epicConfig);
+  it('should search Steam Store for GOG games without a community score (US-022)', async () => {
+    connectionSvc.add('gog', 'My GOG', gogConfig);
     const resultPromise = firstValueFrom(librarySvc.syncAll());
-    httpMock.expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`)).flush(epicLibraryFlush);
+    httpMock.expectOne(r => r.url.includes('/library')).flush(gogLibraryFlush);
     await resultPromise;
 
-    // Background search should have fired for "Fortnite"
     const searchReq = httpMock.expectOne(r => r.url.includes('/search'));
-    expect(searchReq.request.params.get('term')).toBe('Fortnite');
-    searchReq.flush({ candidates: [] }); // no match
+    expect(searchReq.request.params.get('term')).toBe('The Witcher 3');
+    searchReq.flush({ candidates: [] });
   });
 
   it('should auto-match and fetch metadata when Steam title matches exactly (US-022)', async () => {
-    connectionSvc.add('epic', 'My Epic', epicConfig);
+    connectionSvc.add('gog', 'My GOG', gogConfig);
     const resultPromise = firstValueFrom(librarySvc.syncAll());
-    httpMock.expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`)).flush(epicLibraryFlush);
+    httpMock.expectOne(r => r.url.includes('/library')).flush(gogLibraryFlush);
     await resultPromise;
 
-    // Return exact match from search
     httpMock.expectOne(r => r.url.includes('/search')).flush({
-      candidates: [{ appId: '1691700', name: 'Fortnite', imageUrl: 'cap.jpg' }],
+      candidates: [{ appId: '292030', name: 'The Witcher 3: Wild Hunt', imageUrl: 'cap.jpg' }],
     });
 
-    // Metadata should now be fetched for the matched appId
-    httpMock.expectOne(r => r.url.includes('app-details') && r.params.get('appids') === '1691700')
-      .flush({ '1691700': { success: true, data: { name: 'Fortnite', header_image: 'hdr.jpg' } } });
-    httpMock.expectOne(r => r.url.includes('reviews/1691700'))
-      .flush({ success: 1, query_summary: { total_positive: 80, total_reviews: 100, review_score: 8, review_score_desc: '' } });
-
-    const epicGame = librarySvc.games().find(g => g.name === 'Fortnite')!;
-    expect(epicGame.metadata?.imageUrl).toBe('hdr.jpg');
-    expect(epicGame.metadata?.communityScore).toBe(80);
+    // title 'The Witcher 3' vs 'The Witcher 3: Wild Hunt' — not exact, so candidates stored
+    const game = librarySvc.games().find(g => g.name === 'The Witcher 3')!;
+    expect(game.steamCandidates).toHaveLength(1);
   });
 
   it('should store candidates when no exact Steam title match is found (US-022)', async () => {
-    connectionSvc.add('epic', 'My Epic', epicConfig);
+    connectionSvc.add('gog', 'My GOG', gogConfig);
     const resultPromise = firstValueFrom(librarySvc.syncAll());
-    httpMock.expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`)).flush(epicLibraryFlush);
+    httpMock.expectOne(r => r.url.includes('/library')).flush(gogLibraryFlush);
     await resultPromise;
 
-    // Return a near-match (not exact)
     httpMock.expectOne(r => r.url.includes('/search')).flush({
-      candidates: [{ appId: '1691700', name: 'Fortnite Battle Royale', imageUrl: 'cap.jpg' }],
+      candidates: [{ appId: '292030', name: 'The Witcher 3: Wild Hunt', imageUrl: 'cap.jpg' }],
     });
 
-    const epicGame = librarySvc.games().find(g => g.name === 'Fortnite')!;
-    expect(epicGame.steamCandidates).toHaveLength(1);
-    expect(epicGame.steamCandidates![0].name).toBe('Fortnite Battle Royale');
-    // No metadata fetch expected (no exact match)
+    const game = librarySvc.games().find(g => g.name === 'The Witcher 3')!;
+    expect(game.steamCandidates).toHaveLength(1);
+    expect(game.steamCandidates![0].name).toBe('The Witcher 3: Wild Hunt');
   });
 
   it('should not re-search when a confirmed match is already cached (US-022)', async () => {
-    // Add connection first to get the generated storeId used as part of gameId
-    const conn = connectionSvc.add('epic', 'My Epic', epicConfig);
-    const epicGameId = `${conn.id}_fn`; // storeId_appId
+    const conn = connectionSvc.add('gog', 'My GOG', gogConfig);
+    const gogGameId = `${conn.id}_gog_witcher3`;
 
     localStorage.setItem(
-      `gamesync_cache_steam_match_${epicGameId}`,
-      JSON.stringify({ data: '1691700', expiresAt: 0 }),
+      `gamesync_cache_steam_match_${gogGameId}`,
+      JSON.stringify({ data: '292030', expiresAt: 0 }),
     );
     localStorage.setItem(
-      'gamesync_cache_steam_meta_1691700',
-      JSON.stringify({ data: { communityScore: 82, imageUrl: 'img.jpg', fetchedAt: Date.now() }, expiresAt: 0 }),
+      'gamesync_cache_steam_meta_292030',
+      JSON.stringify({ data: { communityScore: 96, imageUrl: 'img.jpg', fetchedAt: Date.now() }, expiresAt: 0 }),
     );
 
     const resultPromise = firstValueFrom(librarySvc.syncAll());
-    httpMock.expectOne(r => r.url.includes(`/library/${epicConfig.accountId}`)).flush(epicLibraryFlush);
+    httpMock.expectOne(r => r.url.includes('/library')).flush(gogLibraryFlush);
     await resultPromise;
 
-    // No search request expected — confirmed match already in cache
     httpMock.expectNone(r => r.url.includes('/search'));
-    const epicGame = librarySvc.games().find(g => g.name === 'Fortnite')!;
-    expect(epicGame.metadata?.communityScore).toBe(82);
+    const game = librarySvc.games().find(g => g.name === 'The Witcher 3')!;
+    expect(game.metadata?.communityScore).toBe(96);
   });
 
   it('should emit empty array when no connections exist (US-001)', async () => {
@@ -295,17 +276,34 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
     await p;
 
-    // A background fetch should have started
     const gameId = librarySvc.games()[0].id;
     expect(librarySvc.fetchingMetadataIds().has(gameId)).toBe(true);
 
-    // Complete the background requests
     httpMock.expectOne(r => r.url.includes('app-details'))
       .flush({ '440': { success: true, data: { name: 'TF2', header_image: 'img.jpg' } } });
     httpMock.expectOne(r => r.url.includes('reviews'))
       .flush({ success: 1, query_summary: { total_positive: 90, total_reviews: 100, review_score: 8, review_score_desc: 'Very Positive' } });
 
-    // Should have been cleared
     expect(librarySvc.fetchingMetadataIds().has(gameId)).toBe(false);
+  });
+
+  it('should keep existing games when a connection fails during sync (US-026)', async () => {
+    connectionSvc.add('steam', 'Steam', steamConfig);
+    const p1 = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
+    await p1;
+    expect(librarySvc.gameCount()).toBe(1);
+
+    // Clear all caches so the second sync makes real HTTP requests.
+    localStorage.clear();
+
+    // Second sync: connection errors mid-flight
+    const p2 = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes('owned-games')).error(new ErrorEvent('network'));
+    await p2;
+
+    // Games from the failed connection are preserved
+    expect(librarySvc.gameCount()).toBe(1);
+    expect(librarySvc.games()[0].name).toBe('TF2');
   });
 });

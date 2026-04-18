@@ -30,7 +30,7 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
-### US-003: Add an Epic Games store connection
+### ~~US-003~~: ~~Add an Epic Games store connection~~ _(removed)_
 **As a** user,
 **I want** to connect my Epic Games account,
 **So that** my Epic library is imported into Gamesync.
@@ -130,7 +130,7 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
-### US-012: Epic Games library via API
+### ~~US-012~~: ~~Epic Games library via API~~ _(removed)_
 **As a** user,
 **I want** to connect my Epic Games account using OAuth so my library is automatically imported,
 **So that** I don't have to manually export and paste JSON.
@@ -284,7 +284,7 @@ This file contains user stories for the Gamesync project. Every change must be r
 ### US-023: GOG library connection
 **As a** user,
 **I want** to connect my GOG account so my GOG library is imported into Gamesync,
-**So that** I can see all my GOG games alongside Steam and Epic titles.
+**So that** I can see all my GOG games alongside Steam and GOG titles.
 
 **Acceptance criteria:**
 - [ ] User can add a GOG connection via the "Add store connection" dialog

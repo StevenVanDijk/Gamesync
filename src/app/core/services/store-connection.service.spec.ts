@@ -30,14 +30,15 @@ describe('StoreConnectionService (US-002, US-003, US-008)', () => {
     expect(service.connections()[0].label).toBe('My Steam');
   });
 
-  it('should add an Epic Games connection (US-003)', () => {
-    service.add('epic', 'My Epic', {
-      accountId: 'acc123',
+  it('should add a GOG connection (US-023)', () => {
+    service.add('gog', 'My GOG', {
+      userId: 'user123',
+      username: 'GogUser',
       accessToken: 'at_abc',
       refreshToken: 'rt_xyz',
       expiresAt: Date.now() + 3_600_000,
     });
-    expect(service.connections()[0].type).toBe('epic');
+    expect(service.connections()[0].type).toBe('gog');
   });
 
   it('should persist connections to localStorage (US-002)', () => {

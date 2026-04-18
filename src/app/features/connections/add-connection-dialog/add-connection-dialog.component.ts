@@ -11,7 +11,6 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { StoreConnectionService } from '../../../core/services/store-connection.service';
-import { EpicApiService } from '../../../core/services/epic-api.service';
 import { GogApiService } from '../../../core/services/gog-api.service';
 import { StoreType } from '../../../core/models/store-connection.model';
 
@@ -40,7 +39,6 @@ import { StoreType } from '../../../core/models/store-connection.model';
           <mat-label>Store</mat-label>
           <mat-select formControlName="type">
             <mat-option value="steam">Steam</mat-option>
-            <mat-option value="epic">Epic Games</mat-option>
             <mat-option value="gog">GOG</mat-option>
           </mat-select>
         </mat-form-field>
@@ -81,47 +79,9 @@ import { StoreType } from '../../../core/models/store-connection.model';
           </mat-form-field>
         }
 
-        @if (form.get('type')?.value === 'epic') {
-          <div class="epic-section">
-            <p class="epic-info">
-              <mat-icon class="info-icon">info</mat-icon>
-              <span>
-                Click <strong>Open Epic Login</strong> to sign in to your Epic account.
-                After logging in, you will see a page displaying JSON — copy the
-                <code>authorizationCode</code> value and paste it below.
-              </span>
-            </p>
-
-            <button
-              type="button"
-              mat-stroked-button
-              color="accent"
-              class="epic-login-btn"
-              (click)="openEpicLogin()"
-            >
-              <mat-icon>open_in_new</mat-icon>
-              Open Epic Login
-            </button>
-          </div>
-
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Authorization code</mat-label>
-            <input
-              matInput
-              [(ngModel)]="epicCode"
-              [ngModelOptions]="{ standalone: true }"
-              placeholder="Paste the authorizationCode from Epic here"
-            />
-          </mat-form-field>
-
-          @if (epicError()) {
-            <p class="epic-error">{{ epicError() }}</p>
-          }
-        }
-
         @if (form.get('type')?.value === 'gog') {
-          <div class="epic-section">
-            <p class="epic-info">
+          <div class="oauth-section">
+            <p class="oauth-info">
               <mat-icon class="info-icon">info</mat-icon>
               <span>
                 Click <strong>Open GOG Login</strong> to sign in to your GOG account.
@@ -134,7 +94,7 @@ import { StoreType } from '../../../core/models/store-connection.model';
               type="button"
               mat-stroked-button
               color="accent"
-              class="epic-login-btn"
+              class="oauth-login-btn"
               (click)="openGogLogin()"
             >
               <mat-icon>open_in_new</mat-icon>
@@ -153,7 +113,7 @@ import { StoreType } from '../../../core/models/store-connection.model';
           </mat-form-field>
 
           @if (gogError()) {
-            <p class="epic-error">{{ gogError() }}</p>
+            <p class="error-text">{{ gogError() }}</p>
           }
         }
       </form>
@@ -162,20 +122,7 @@ import { StoreType } from '../../../core/models/store-connection.model';
     <mat-dialog-actions align="end">
       <button mat-button mat-dialog-close>Cancel</button>
 
-      @if (form.get('type')?.value === 'epic') {
-        <button
-          mat-flat-button
-          color="accent"
-          (click)="connectEpic()"
-          [disabled]="epicLoading() || !epicCode.trim()"
-        >
-          @if (epicLoading()) {
-            <mat-spinner diameter="20" class="btn-spinner"></mat-spinner>
-          } @else {
-            Connect with Epic
-          }
-        </button>
-      } @else if (form.get('type')?.value === 'gog') {
+      @if (form.get('type')?.value === 'gog') {
         <button
           mat-flat-button
           color="accent"
@@ -204,13 +151,13 @@ import { StoreType } from '../../../core/models/store-connection.model';
     .dialog-form { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
     .full-width { width: 100%; }
 
-    .epic-section {
+    .oauth-section {
       display: flex;
       flex-direction: column;
       gap: 10px;
       margin-bottom: 4px;
     }
-    .epic-info {
+    .oauth-info {
       display: flex;
       align-items: flex-start;
       gap: 8px;
@@ -225,8 +172,8 @@ import { StoreType } from '../../../core/models/store-connection.model';
       border-radius: 3px;
       font-size: 13px;
     }
-    .epic-login-btn { align-self: flex-start; }
-    .epic-error { color: #f44336; font-size: 13px; margin: 0; }
+    .oauth-login-btn { align-self: flex-start; }
+    .error-text { color: #f44336; font-size: 13px; margin: 0; }
     .btn-spinner { display: inline-block; }
   `],
 })
@@ -234,13 +181,8 @@ export class AddConnectionDialogComponent {
   private readonly fb = inject(FormBuilder);
   private readonly dialogRef = inject(MatDialogRef<AddConnectionDialogComponent>);
   private readonly connectionSvc = inject(StoreConnectionService);
-  private readonly epicApi = inject(EpicApiService);
   private readonly gogApi = inject(GogApiService);
   private readonly destroyRef = inject(DestroyRef);
-
-  epicLoading = signal(false);
-  epicError = signal('');
-  epicCode = '';
 
   gogLoading = signal(false);
   gogError = signal('');
@@ -270,8 +212,6 @@ export class AddConnectionDialogComponent {
       label.updateValueAndValidity();
       apiKey.updateValueAndValidity();
       steamId.updateValueAndValidity();
-      this.epicCode = '';
-      this.epicError.set('');
       this.gogCode = '';
       this.gogError.set('');
     });
@@ -283,24 +223,6 @@ export class AddConnectionDialogComponent {
     const { label, apiKey, steamId } = this.form.getRawValue();
     this.connectionSvc.add('steam', label!, { apiKey: apiKey!, steamId: steamId! });
     this.dialogRef.close(true);
-  }
-
-  openEpicLogin(): void {
-    this.epicApi.getAuthUrl().subscribe({
-      next: url => window.open(url, '_blank', 'noopener,noreferrer'),
-      error: () => {
-        // Fallback: open the known login URL directly
-        const redirectApiUrl =
-          'https://www.epicgames.com/id/api/redirect' +
-          '?clientId=34a02cf8f4414e29b15921876da36f9a&responseType=code';
-        window.open(
-          'https://www.epicgames.com/id/login?redirectUrl=' +
-            encodeURIComponent(redirectApiUrl),
-          '_blank',
-          'noopener,noreferrer',
-        );
-      },
-    });
   }
 
   openGogLogin(): void {
@@ -337,31 +259,4 @@ export class AddConnectionDialogComponent {
       },
     });
   }
-
-  connectEpic(): void {
-    const code = this.epicCode.trim();
-    if (!code) return;
-    this.epicLoading.set(true);
-    this.epicError.set('');
-
-    this.epicApi.exchangeCode(code).subscribe({
-      next: tokens => {
-        this.connectionSvc.add('epic', tokens.displayName ?? 'Epic Account', {
-          accountId: tokens.accountId,
-          displayName: tokens.displayName,
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          expiresAt: tokens.expiresAt,
-        });
-        this.epicLoading.set(false);
-        this.dialogRef.close(true);
-      },
-      error: err => {
-        this.epicLoading.set(false);
-        const detail = err?.error?.detail ?? err?.error?.error ?? err?.message ?? 'Unknown error';
-        this.epicError.set(`Failed to connect: ${detail}`);
-      },
-    });
-  }
-
 }
