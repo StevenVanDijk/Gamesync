@@ -67,6 +67,13 @@ import { SteamCandidate } from '../../core/models/game.model';
               {{ game()!.hoursPlayed | number:'1.0-1' }} hours played
             </p>
 
+            @if (game()!.isInstalled !== undefined) {
+              <p class="meta-line" [class.installed-yes]="game()!.isInstalled">
+                <mat-icon class="inline-icon">{{ game()!.isInstalled ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+                {{ game()!.isInstalled ? 'Installed' : 'Not installed' }}
+              </p>
+            }
+
             @if (game()!.metadata?.communityScore !== undefined) {
               <div class="score-section">
                 <span class="score-label">Community score</span>
@@ -189,6 +196,7 @@ import { SteamCandidate } from '../../core/models/game.model';
       font-size: 14px;
     }
     .inline-icon { font-size: 16px; width: 16px; height: 16px; }
+    .installed-yes { color: #4caf50; }
     .score-section { display: flex; flex-direction: column; gap: 6px; }
     .score-label, .tags-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
     .score-bar-row { display: flex; align-items: center; gap: 12px; }

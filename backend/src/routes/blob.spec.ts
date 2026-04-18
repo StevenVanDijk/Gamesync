@@ -132,6 +132,29 @@ describe('GET /api/blob/library (US-028)', () => {
     expect(res.body.games[2]).toMatchObject({ name: '[REDACTED]', source: 'epic', hoursPlayed: 0 });
   });
 
+  it('should include isInstalled from Playnite export (US-029)', async () => {
+    const csv = [
+      '#TYPE Selected.Playnite.SDK.Models.Game',
+      '"Name","Source","Playtime","IsInstalled"',
+      '"Team Fortress 2","Steam","0","True"',
+      '"Fortnite","Epic","0","False"',
+    ].join('\n');
+    mockGet.mockResolvedValueOnce({ data: csv });
+
+    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    expect(res.status).toBe(200);
+    expect(res.body.games[0]).toMatchObject({ name: 'Team Fortress 2', isInstalled: true });
+    expect(res.body.games[1]).toMatchObject({ name: 'Fortnite', isInstalled: false });
+  });
+
+  it('should omit isInstalled when IsInstalled column is absent (US-029)', async () => {
+    mockGet.mockResolvedValueOnce({ data: CSV_BASIC });
+
+    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    expect(res.status).toBe(200);
+    expect(res.body.games[0]).not.toHaveProperty('isInstalled');
+  });
+
   it('should handle Playnite export with leading space in name', async () => {
     const csv = [
       '#TYPE Selected.Playnite.SDK.Models.Game',

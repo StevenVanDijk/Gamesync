@@ -372,3 +372,17 @@ This file contains user stories for the Gamesync project. Every change must be r
 - [ ] Where a CSV game has no matching library game it is added as a new entry tagged with its `source`
 - [ ] The SAS URL is stored in the connection config; no server-side secret is required
 - [ ] Playnite CSV exports are supported: the backend detects the `#TYPE` comment, converts `Playtime` from seconds to hours, and ignores extra columns (`ReleaseDate`, `IsInstalled`)
+
+---
+
+### US-029: Show installation status from CSV source
+**As a** user,
+**I want** to see whether each game is installed, when that information is available from my CSV,
+**So that** I can quickly identify which games are ready to play.
+
+**Acceptance criteria:**
+- [ ] When a CSV row has an `IsInstalled` column (Playnite export), the value is surfaced on the game
+- [ ] In list view, an icon indicates installed (`check_circle`) or not installed (`radio_button_unchecked`) — only shown when the field is present
+- [ ] In card/compact view, a small indicator is shown when the field is present
+- [ ] In game detail, a meta line shows "Installed" or "Not installed" — only when the field is present
+- [ ] Games from Steam/GOG connections (where `isInstalled` is absent) show nothing

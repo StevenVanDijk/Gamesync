@@ -30,6 +30,13 @@ import { Game } from '../../../core/models/game.model';
             }
           </div>
           <span class="list-name" [title]="game().name">{{ game().name }}</span>
+          @if (game().isInstalled !== undefined) {
+            <mat-icon
+              class="list-installed-icon"
+              [class.installed]="game().isInstalled"
+              [matTooltip]="game().isInstalled ? 'Installed' : 'Not installed'"
+            >{{ game().isInstalled ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+          }
           <span class="list-hours">{{ game().hoursPlayed | number:'1.0-1' }}&thinsp;h</span>
           <span class="list-score">
             @if (metadataLoading()) {
@@ -78,6 +85,12 @@ import { Game } from '../../../core/models/game.model';
             <mat-icon class="inline-icon">schedule</mat-icon>
             {{ game().hoursPlayed | number:'1.0-1' }} hrs
           </p>
+          @if (game().isInstalled !== undefined) {
+            <p class="card-installed" [class.card-installed--yes]="game().isInstalled">
+              <mat-icon class="inline-icon">{{ game().isInstalled ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+              {{ game().isInstalled ? 'Installed' : 'Not installed' }}
+            </p>
+          }
           @if (!compact()) {
             @if (game().metadata?.yearPublished) {
               <p class="year">{{ game().metadata?.yearPublished }}</p>
@@ -164,6 +177,14 @@ import { Game } from '../../../core/models/game.model';
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .list-installed-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      color: #555;
+    }
+    .list-installed-icon.installed { color: #4caf50; }
     .list-hours {
       font-size: 12px;
       color: #888;
@@ -267,6 +288,15 @@ import { Game } from '../../../core/models/game.model';
     }
     .compact .hours-played { font-size: 11px; }
 
+    .card-installed {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      margin: 0 0 2px;
+      font-size: 11px;
+      color: #666;
+    }
+    .card-installed--yes { color: #4caf50; }
     .year {
       margin: 0 0 4px;
       font-size: 11px;

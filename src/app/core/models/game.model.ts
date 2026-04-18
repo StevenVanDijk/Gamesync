@@ -38,4 +38,10 @@ export interface Game {
    * matching and display only — not a StoreType.
    */
   csvSource?: string;
+  /**
+   * Whether the game is currently installed on the user's machine.
+   * Only present when the source CSV includes an `IsInstalled` column
+   * (e.g. Playnite exports). Absent for Steam/GOG connections.
+   */
+  isInstalled?: boolean;
 }

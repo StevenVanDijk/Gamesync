@@ -15,6 +15,7 @@ interface CsvGame {
   name: string;
   source: string;
   hoursPlayed: number;
+  isInstalled?: boolean;
 }
 
 const TAG = 'Blob';
@@ -41,6 +42,7 @@ export class BlobApiService {
             name: g.name,
             hoursPlayed: g.hoursPlayed,
             csvSource: g.source || undefined,
+            ...(g.isInstalled !== undefined && { isInstalled: g.isInstalled }),
           }));
         }),
         catchError(err => {

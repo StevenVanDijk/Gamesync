@@ -140,10 +140,15 @@ blobRouter.get('/library', async (req: Request, res: Response) => {
         const rawPlaytime = r['playtime'] ?? r['hours'] ?? r['hours played'] ?? '0';
         let hoursPlayed = Math.max(0, parseFloat(rawPlaytime) || 0);
         if (playtimeInSeconds) hoursPlayed = hoursPlayed / 3600;
+        const rawInstalled = r['isinstalled'];
+        const isInstalled = rawInstalled !== undefined
+          ? rawInstalled.toLowerCase() === 'true'
+          : undefined;
         return {
           name: r['name'].trim(),
           source: (r['source'] ?? r['store'] ?? '').toLowerCase().trim(),
           hoursPlayed,
+          ...(isInstalled !== undefined && { isInstalled }),
         };
       });
 
