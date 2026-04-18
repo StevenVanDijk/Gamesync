@@ -21,11 +21,13 @@ function makeLibrarySvc(games: Game[]) {
     syncing: signal(false),
     error: signal<string | null>(null),
     gameCount: signal(games.length),
+    unmatchedCount: signal(0),
     fetchingMetadataIds: signal<ReadonlySet<string>>(new Set()),
     syncAll: vi.fn().mockReturnValue(of(games)),
     removeByConnection: vi.fn(),
     getById: vi.fn(),
     updateGameMetadata: vi.fn(),
+    retryAllUnmatched: vi.fn(),
   };
 }
 

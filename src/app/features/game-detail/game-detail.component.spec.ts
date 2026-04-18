@@ -41,7 +41,11 @@ const GOG_GAME_WITH_CANDIDATES: Game = {
 describe('GameDetailComponent (US-004, US-005)', () => {
   let fixture: ComponentFixture<GameDetailComponent>;
 
-  async function createComponent(game: Game | undefined, storeType: 'steam' | 'gog' = 'steam') {
+  async function createComponent(
+    game: Game | undefined,
+    storeType: 'steam' | 'gog' = 'steam',
+    cachedCandidates: SteamCandidate[] | null = null,
+  ) {
     const gamesSignal = signal<Game[]>(game ? [game] : []);
 
     const steamApiSpy = {
@@ -52,6 +56,7 @@ describe('GameDetailComponent (US-004, US-005)', () => {
       setConfirmedMatch: vi.fn(),
       clearCandidates: vi.fn(),
       getConfirmedMatch: vi.fn().mockReturnValue(null),
+      getCachedCandidates: vi.fn().mockReturnValue(cachedCandidates),
     };
 
     const librarySvc = {
@@ -59,6 +64,7 @@ describe('GameDetailComponent (US-004, US-005)', () => {
       syncing: signal(false),
       error: signal(null),
       gameCount: signal(0),
+      fetchingMetadataIds: signal<ReadonlySet<string>>(new Set()),
       getById: vi.fn().mockReturnValue(game),
       updateGameMetadata: vi.fn((id: string, meta: Game['metadata']) => {
         gamesSignal.update(gs => gs.map(g => g.id === id ? { ...g, metadata: meta } : g));
@@ -68,6 +74,8 @@ describe('GameDetailComponent (US-004, US-005)', () => {
       }),
       syncAll: vi.fn().mockReturnValue(of([])),
       removeByConnection: vi.fn(),
+      retrySearch: vi.fn(),
+      retryAllUnmatched: vi.fn(),
     };
 
     const connectionSvc = {
@@ -208,5 +216,33 @@ describe('GameDetailComponent (US-004, US-005)', () => {
 
     expect(fixture.nativeElement.textContent).toContain('88%');
     expect(fixture.nativeElement.textContent).not.toContain('The Witcher 3: Wild Hunt');
+  });
+
+  // ── US-030: retry Steam search for unmatched games ───────────────────────
+
+  it('should show "No match found on Steam" when cached candidates are empty (US-030)', async () => {
+    // Pass [] as cachedCandidates to simulate "searched but nothing found"
+    await createComponent(GOG_GAME_NO_META, 'gog', []);
+    expect(fixture.nativeElement.textContent).toContain('No match found on Steam');
+  });
+
+  it('should show Retry button when noSteamMatch is true (US-030)', async () => {
+    await createComponent(GOG_GAME_NO_META, 'gog', []);
+    const retryBtn = fixture.nativeElement.querySelector('button[mat-stroked-button]') as HTMLButtonElement | null;
+    expect(retryBtn).toBeTruthy();
+    expect(retryBtn!.textContent).toContain('Retry Steam search');
+  });
+
+  it('should NOT show Retry button when candidates cache is null (never searched) (US-030)', async () => {
+    await createComponent(GOG_GAME_NO_META, 'gog', null);
+    expect(fixture.nativeElement.textContent).not.toContain('Retry Steam search');
+    expect(fixture.nativeElement.textContent).toContain('No Steam metadata available for this game.');
+  });
+
+  it('should call librarySvc.retrySearch when Retry button is clicked (US-030)', async () => {
+    const { librarySvc } = await createComponent(GOG_GAME_NO_META, 'gog', []);
+    const retryBtn = fixture.nativeElement.querySelector('button[mat-stroked-button]') as HTMLButtonElement;
+    retryBtn.click();
+    expect(librarySvc.retrySearch).toHaveBeenCalledWith(GOG_GAME_NO_META);
   });
 });

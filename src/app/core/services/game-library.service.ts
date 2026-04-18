@@ -40,6 +40,19 @@ export class GameLibraryService {
 
   readonly gameCount = computed(() => this._games().length);
 
+  /**
+   * Number of non-Steam games that were searched but had no Steam match.
+   * Recalculated whenever the game list changes.
+   */
+  readonly unmatchedCount = computed(() =>
+    this._games().filter(g => {
+      const conn = this.connectionSvc.getById(g.storeId);
+      if (conn?.type === 'steam') return false;
+      const cached = this.steamApi.getCachedCandidates(g.id);
+      return cached !== null && cached.length === 0;
+    }).length,
+  );
+
   /** Aggregate all games from every configured store connection.
    *
    * Each connection is fetched independently — a failure on one does not
@@ -125,6 +138,32 @@ export class GameLibraryService {
   /** Remove all games that belong to a specific store connection. */
   removeByConnection(connectionId: string): void {
     this._games.update(games => games.filter(g => g.storeId !== connectionId));
+  }
+
+  /**
+   * Clear the "no match" cache for a single game and immediately re-run the
+   * Steam Store search for it.
+   */
+  retrySearch(game: Game): void {
+    this.steamApi.clearCandidates(game.id);
+    this.backgroundMatchNonSteamGames([game]);
+  }
+
+  /**
+   * Clear the "no match" cache for every permanently unmatched non-Steam game
+   * and re-run their Steam Store searches concurrently.
+   */
+  retryAllUnmatched(): void {
+    const unmatched = this._games().filter(g => {
+      const conn = this.connectionSvc.getById(g.storeId);
+      if (conn?.type === 'steam') return false;
+      const cached = this.steamApi.getCachedCandidates(g.id);
+      return cached !== null && cached.length === 0;
+    });
+    if (unmatched.length === 0) return;
+    this.logger.info(TAG, `retryAllUnmatched: clearing cache for ${unmatched.length} game(s)`);
+    unmatched.forEach(g => this.steamApi.clearCandidates(g.id));
+    this.backgroundMatchNonSteamGames(unmatched);
   }
 
   getById(id: string): Game | undefined {

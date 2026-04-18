@@ -127,6 +127,16 @@ import { SteamCandidate } from '../../core/models/game.model';
                   <mat-icon>download</mat-icon>
                   Load metadata from Steam
                 </button>
+              } @else if (noSteamMatch()) {
+                <p class="no-metadata-note">No match found on Steam.</p>
+                <button mat-stroked-button [disabled]="searchRetrying()" (click)="retrySearch()">
+                  @if (searchRetrying()) {
+                    <mat-spinner diameter="16" class="btn-spinner"></mat-spinner>
+                  } @else {
+                    <mat-icon>refresh</mat-icon>
+                  }
+                  Retry Steam search
+                </button>
               } @else {
                 <p class="no-metadata-note">No Steam metadata available for this game.</p>
               }
@@ -205,7 +215,8 @@ import { SteamCandidate } from '../../core/models/game.model';
     .tags-section { display: flex; flex-direction: column; gap: 6px; }
     .tags { display: flex; flex-wrap: wrap; gap: 6px; }
     .loading-meta { font-size: 13px; color: #888; }
-    .no-metadata-note { font-size: 13px; color: #888; margin: 0; }
+    .no-metadata-note { font-size: 13px; color: #888; margin: 0 0 6px; }
+    .btn-spinner { display: inline-block; vertical-align: middle; }
     .candidates-section { display: flex; flex-direction: column; gap: 8px; }
     .candidates-label {
       display: flex;
@@ -267,6 +278,19 @@ export class GameDetailComponent implements OnInit {
     () => (this.game()?.steamCandidates?.length ?? 0) > 0,
   );
 
+  /** True when the game was searched on Steam and came back with zero results. */
+  protected readonly noSteamMatch = computed(() => {
+    const g = this.game();
+    if (!g || this.isSteam()) return false;
+    const cached = this.steamApi.getCachedCandidates(g.id);
+    return cached !== null && cached.length === 0;
+  });
+
+  /** True while this game's Steam search (or metadata fetch) is running. */
+  protected readonly searchRetrying = computed(() =>
+    this.librarySvc.fetchingMetadataIds().has(this.id),
+  );
+
   /** Steam store URL when available — for Steam games, or non-Steam games with a confirmed match. */
   protected readonly steamStoreUrl = computed(() => {
     const g = this.game();
@@ -298,6 +322,13 @@ export class GameDetailComponent implements OnInit {
       },
       error: () => this.metadataLoading.set(false),
     });
+  }
+
+  /** Clear the "no match" cache for this game and immediately re-run the Steam search. */
+  retrySearch(): void {
+    const g = this.game();
+    if (!g) return;
+    this.librarySvc.retrySearch(g);
   }
 
   /** User confirmed a Steam candidate — fetch and apply metadata, store the match permanently. */

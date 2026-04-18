@@ -61,6 +61,19 @@ type ViewMode = 'card' | 'compact' | 'list';
               Sync
             </button>
 
+            @if (librarySvc.unmatchedCount() > 0) {
+              <button
+                mat-stroked-button
+                class="retry-btn"
+                (click)="retryUnmatched()"
+                [disabled]="librarySvc.syncing()"
+                [matTooltip]="'Re-run Steam search for ' + librarySvc.unmatchedCount() + ' unmatched game(s)'"
+              >
+                <mat-icon>manage_search</mat-icon>
+                Retry unmatched ({{ librarySvc.unmatchedCount() }})
+              </button>
+            }
+
             <div class="view-toggle">
               <button
                 mat-icon-button
@@ -157,8 +170,10 @@ type ViewMode = 'card' | 'compact' | 'list';
       gap: 4px;
       margin-top: 4px;
       flex-shrink: 0;
+      flex-wrap: wrap;
     }
     .sync-btn { flex-shrink: 0; }
+    .retry-btn { flex-shrink: 0; font-size: 12px; }
 
     .view-toggle {
       display: flex;
@@ -233,7 +248,7 @@ export class LibraryComponent implements OnInit {
   ];
 
   searchQuery = signal('');
-  sortKey = signal<'name' | 'hoursPlayed' | 'year' | 'score'>('name');
+  sortKey = signal<'name' | 'hoursPlayed' | 'year' | 'score'>('hoursPlayed');
   viewMode = signal<ViewMode>('list');
 
   /** Stable colour per connection ID, assigned in arrival order. */
@@ -291,5 +306,9 @@ export class LibraryComponent implements OnInit {
 
   goToConnections(): void {
     this.router.navigate(['/connections']);
+  }
+
+  retryUnmatched(): void {
+    this.librarySvc.retryAllUnmatched();
   }
 }

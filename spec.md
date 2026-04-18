@@ -386,3 +386,19 @@ This file contains user stories for the Gamesync project. Every change must be r
 - [ ] In card/compact view, a small indicator is shown when the field is present
 - [ ] In game detail, a meta line shows "Installed" or "Not installed" — only when the field is present
 - [ ] Games from Steam/GOG connections (where `isInstalled` is absent) show nothing
+
+---
+
+### US-030: Skip re-fetching metadata for Steam-unmatched games
+**As a** user,
+**I want** games that were searched on Steam but had no match to be permanently skipped on subsequent syncs,
+**So that** every sync isn't wasted re-searching for games that Steam doesn't know about.
+
+**Acceptance criteria:**
+- [ ] When a Steam Store search returns zero results for a non-Steam game, that result is cached permanently (not just for 24 h)
+- [ ] On subsequent syncs, games with a permanent "no match" cache entry are skipped without hitting Steam
+- [ ] In game detail, a "no match" game shows "No match found on Steam" and a **Retry** button
+- [ ] Clicking Retry clears the no-match cache for that game and immediately re-runs the Steam search
+- [ ] In the library header, a **Retry unmatched (N)** button appears when N ≥ 1 games are permanently unmatched
+- [ ] Clicking it clears the no-match cache for all unmatched games and re-runs searches concurrently
+- [ ] The Retry button is disabled / shows a spinner while the search is in progress

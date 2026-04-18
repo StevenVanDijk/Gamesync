@@ -275,7 +275,11 @@ export class SteamApiService {
   }
 
   setCachedCandidates(gameId: string, candidates: SteamCandidate[]): void {
-    this.cache.set(`steam_candidates_${gameId}`, candidates, SEARCH_CACHE_TTL_MS);
+    // "No match" entries (empty array) are cached permanently so syncs don't
+    // keep hitting Steam for games it doesn't know about.  Non-empty candidate
+    // lists expire after 24 h so they stay reasonably fresh.
+    const ttl = candidates.length === 0 ? PERMANENT_CACHE : SEARCH_CACHE_TTL_MS;
+    this.cache.set(`steam_candidates_${gameId}`, candidates, ttl);
   }
 
   clearCandidates(gameId: string): void {
