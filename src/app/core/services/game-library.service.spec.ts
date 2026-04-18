@@ -5,9 +5,10 @@ import { Observable, firstValueFrom } from 'rxjs';
 import { GameLibraryService } from './game-library.service';
 import { StoreConnectionService } from './store-connection.service';
 import { RateLimiterService } from './rate-limiter.service';
-import { SteamConnectionConfig, GogConnectionConfig } from '../models/store-connection.model';
+import { SteamConnectionConfig, GogConnectionConfig, BlobConnectionConfig } from '../models/store-connection.model';
 import { STEAM_BACKEND_URL } from './steam-api.service';
 import { GOG_BACKEND_URL } from './gog-api.service';
+import { BLOB_BACKEND_URL } from './blob-api.service';
 
 function makeImmediateRateLimiter(): Partial<RateLimiterService> {
   return {
@@ -19,6 +20,7 @@ function makeImmediateRateLimiter(): Partial<RateLimiterService> {
 
 const TEST_STEAM = 'http://test-steam/api/steam';
 const TEST_GOG = 'http://test-gog/api/gog';
+const TEST_BLOB = 'http://test-blob/api/blob';
 
 describe('GameLibraryService (US-001, US-004, US-008)', () => {
   let librarySvc: GameLibraryService;
@@ -36,6 +38,10 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     accessToken: 'at_valid',
     refreshToken: 'rt_valid',
     expiresAt: Date.now() + 3_600_000,
+  };
+
+  const blobConfig: BlobConnectionConfig = {
+    url: 'https://mystorage.blob.core.windows.net/c/games.csv?sv=test',
   };
 
   const ownedGamesFlush = {
@@ -57,6 +63,7 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
         { provide: RateLimiterService, useValue: makeImmediateRateLimiter() },
         { provide: STEAM_BACKEND_URL, useValue: TEST_STEAM },
         { provide: GOG_BACKEND_URL, useValue: TEST_GOG },
+        { provide: BLOB_BACKEND_URL, useValue: TEST_BLOB },
       ],
     });
     librarySvc = TestBed.inject(GameLibraryService);
@@ -80,6 +87,9 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
           query_summary: { total_positive: 0, total_reviews: 0, review_score: 0, review_score_desc: '' },
         }),
       );
+    httpMock
+      .match(r => r.url.includes(TEST_BLOB))
+      .forEach(r => r.flush({ games: [] }));
     httpMock.verify();
     localStorage.clear();
   });
@@ -305,5 +315,56 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
     // Games from the failed connection are preserved
     expect(librarySvc.gameCount()).toBe(1);
     expect(librarySvc.games()[0].name).toBe('TF2');
+  });
+
+  it('should fetch blob CSV games and add them to the library (US-028)', async () => {
+    connectionSvc.add('blob', 'My CSV', blobConfig);
+
+    const p = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes(TEST_BLOB)).flush({
+      games: [
+        { name: 'Fortnite', source: 'epic', hoursPlayed: 0 },
+        { name: 'Diablo IV', source: 'battlenet', hoursPlayed: 22 },
+      ],
+    });
+    await p;
+
+    expect(librarySvc.gameCount()).toBe(2);
+    expect(librarySvc.games().map(g => g.name)).toContain('Fortnite');
+    expect(librarySvc.games().map(g => g.name)).toContain('Diablo IV');
+  });
+
+  it('should merge blob CSV hours into existing library game (US-028)', async () => {
+    connectionSvc.add('steam', 'Steam', steamConfig);
+    connectionSvc.add('blob', 'My CSV', blobConfig);
+
+    const p = firstValueFrom(librarySvc.syncAll());
+    // Steam returns TF2 with 2 hours (120 min ÷ 60)
+    httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
+    // Blob CSV says TF2 has 50 hours (more) — same name for the merge to work
+    httpMock.expectOne(r => r.url.includes(TEST_BLOB)).flush({
+      games: [{ name: 'TF2', source: 'steam', hoursPlayed: 50 }],
+    });
+    await p;
+
+    // CSV match replaces hoursPlayed with the higher value; only 1 unique game
+    expect(librarySvc.gameCount()).toBe(1);
+    expect(librarySvc.games()[0].hoursPlayed).toBe(50);
+  });
+
+  it('should keep existing hoursPlayed when blob CSV reports less (US-028)', async () => {
+    connectionSvc.add('steam', 'Steam', steamConfig);
+    connectionSvc.add('blob', 'My CSV', blobConfig);
+
+    const p = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes('owned-games')).flush(ownedGamesFlush);
+    // Blob says TF2 has only 1 hour (less than Steam's 2h) — same name for the merge
+    httpMock.expectOne(r => r.url.includes(TEST_BLOB)).flush({
+      games: [{ name: 'TF2', source: 'steam', hoursPlayed: 1 }],
+    });
+    await p;
+
+    expect(librarySvc.gameCount()).toBe(1);
+    expect(librarySvc.games()[0].hoursPlayed).toBe(2);
   });
 });

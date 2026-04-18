@@ -32,4 +32,10 @@ export interface Game {
    * match was found automatically. Cleared once the user selects a match.
    */
   steamCandidates?: SteamCandidate[];
+  /**
+   * For games sourced from a CSV blob, the free-text store name from the
+   * `source` column (e.g. "epic", "battlenet", "ubisoft").  Used for merge
+   * matching and display only — not a StoreType.
+   */
+  csvSource?: string;
 }

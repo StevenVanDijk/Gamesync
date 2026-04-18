@@ -1,4 +1,4 @@
-export type StoreType = 'steam' | 'gog';
+export type StoreType = 'steam' | 'gog' | 'blob';
 
 export interface SteamConnectionConfig {
   apiKey: string;
@@ -18,7 +18,12 @@ export interface GogConnectionConfig {
   expiresAt: number;
 }
 
-export type ConnectionConfig = SteamConnectionConfig | GogConnectionConfig;
+export interface BlobConnectionConfig {
+  /** Full Azure Blob SAS URL including query-string auth token. */
+  url: string;
+}
+
+export type ConnectionConfig = SteamConnectionConfig | GogConnectionConfig | BlobConnectionConfig;
 
 export interface StoreConnection {
   id: string;

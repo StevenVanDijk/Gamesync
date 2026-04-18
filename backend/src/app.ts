@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { steamRouter } from '../../api/_steam-routes.js';
 import { gogRouter } from '../../api/_gog-routes.js';
+import { blobRouter } from '../../api/_blob-routes.js';
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.use(
 
 app.use('/api/steam', steamRouter);
 app.use('/api/gog', gogRouter);
+app.use('/api/blob', blobRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 

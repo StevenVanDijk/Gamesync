@@ -9,6 +9,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { StoreConnectionService } from '../../core/services/store-connection.service';
 import { GameLibraryService } from '../../core/services/game-library.service';
 import {
+  BlobConnectionConfig,
   GogConnectionConfig,
   SteamConnectionConfig,
   StoreConnection,
@@ -67,6 +68,12 @@ import { AddConnectionDialogComponent } from './add-connection-dialog/add-connec
                   <p class="detail-line">
                     <strong>Account:</strong>
                     {{ gogCfg(conn).username }}
+                  </p>
+                }
+                @if (conn.type === 'blob') {
+                  <p class="detail-line blob-url">
+                    <strong>URL:</strong>
+                    {{ blobCfg(conn).url | slice:0:60 }}{{ blobCfg(conn).url.length > 60 ? '…' : '' }}
                   </p>
                 }
                 @if (conn.lastSyncedAt) {
@@ -140,6 +147,10 @@ export class ConnectionsComponent {
     return conn.config as GogConnectionConfig;
   }
 
+  blobCfg(conn: StoreConnection): BlobConnectionConfig {
+    return conn.config as BlobConnectionConfig;
+  }
+
   maskKey(key: string): string {
     if (key.length <= 8) return '••••••••';
     return key.slice(0, 4) + '••••••••' + key.slice(-4);
@@ -150,6 +161,8 @@ export class ConnectionsComponent {
   }
 
   storeLabel(type: StoreType): string {
-    return type === 'steam' ? 'Steam' : 'GOG';
+    if (type === 'steam') return 'Steam';
+    if (type === 'gog') return 'GOG';
+    return 'CSV (Azure Blob)';
   }
 }

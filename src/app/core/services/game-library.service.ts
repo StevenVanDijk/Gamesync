@@ -3,6 +3,7 @@ import { Observable, EMPTY, forkJoin, of, switchMap, finalize, from, mergeMap } 
 import { tap, catchError } from 'rxjs/operators';
 import { Game, SteamCandidate } from '../models/game.model';
 import {
+  BlobConnectionConfig,
   GogConnectionConfig,
   SteamConnectionConfig,
   StoreConnection,
@@ -10,6 +11,7 @@ import {
 import { StoreConnectionService } from './store-connection.service';
 import { SteamApiService } from './steam-api.service';
 import { GogApiService } from './gog-api.service';
+import { BlobApiService } from './blob-api.service';
 import { LoggingService } from './logging.service';
 
 const TAG = 'Gamesync';
@@ -22,6 +24,7 @@ export class GameLibraryService {
   private readonly connectionSvc = inject(StoreConnectionService);
   private readonly steamApi = inject(SteamApiService);
   private readonly gogApi = inject(GogApiService);
+  private readonly blobApi = inject(BlobApiService);
   private readonly logger = inject(LoggingService);
 
   private readonly _games = signal<Game[]>([]);
@@ -89,9 +92,11 @@ export class GameLibraryService {
           );
 
           // Merge: keep games from failed connections, update/add from successful ones.
+          // CSV blob games are further de-duplicated against real-connection games.
           this._games.update(existing => {
-            const merged = existing.filter(g => !successfulIds.has(g.storeId));
-            return [...merged, ...freshGames];
+            const preserved = existing.filter(g => !successfulIds.has(g.storeId));
+            const merged = this.mergeBlobGames([...preserved, ...freshGames]);
+            return merged;
           });
 
           const failedCount = connections.length - successfulIds.size;
@@ -362,6 +367,64 @@ export class GameLibraryService {
     }
   }
 
+  /**
+   * De-duplicate CSV blob games against real-connection games.
+   *
+   * For each blob game:
+   *  - If a non-blob game with the same normalised title exists, take
+   *    `hoursPlayed = max(existing, csv)` and discard the blob entry.
+   *  - Otherwise keep the blob entry as a standalone game (e.g. Epic, Battle.net).
+   */
+  private mergeBlobGames(games: Game[]): Game[] {
+    const blobGames = games.filter(g => {
+      const conn = this.connectionSvc.getById(g.storeId);
+      return conn?.type === 'blob';
+    });
+    if (blobGames.length === 0) return games;
+
+    const realGames = games.filter(g => {
+      const conn = this.connectionSvc.getById(g.storeId);
+      return conn?.type !== 'blob';
+    });
+
+    // Build a normalised-name index over real games for O(1) lookup.
+    const byNormName = new Map<string, number>(); // normName → index in realGames array
+    const mutableReal = realGames.map(g => ({ ...g }));
+    mutableReal.forEach((g, i) => byNormName.set(this.normTitle(g.name), i));
+
+    const unmatched: Game[] = [];
+    for (const blobGame of blobGames) {
+      const key = this.normTitle(blobGame.name);
+      const idx = byNormName.get(key);
+      if (idx !== undefined) {
+        // Update playtime if CSV reports more.
+        if (blobGame.hoursPlayed > mutableReal[idx].hoursPlayed) {
+          mutableReal[idx] = { ...mutableReal[idx], hoursPlayed: blobGame.hoursPlayed };
+          this.logger.info(
+            TAG,
+            `blob merge: updated hoursPlayed for "${blobGame.name}" to ${blobGame.hoursPlayed}h`,
+          );
+        }
+      } else {
+        unmatched.push(blobGame);
+      }
+    }
+
+    if (unmatched.length > 0) {
+      this.logger.info(TAG, `blob merge: ${unmatched.length} unmatched game(s) added from CSV`);
+    }
+    return [...mutableReal, ...unmatched];
+  }
+
+  /** Normalise a title for fuzzy matching (lowercase, strip symbols & punctuation). */
+  private normTitle(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/[™®©:,.\-''""!?]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   /** Case-insensitive title comparison, ignoring trademark symbols and extra whitespace. */
   private titlesMatch(a: string, b: string): boolean {
     const normalize = (s: string) =>
@@ -384,6 +447,12 @@ export class GameLibraryService {
         fetch$ = this.gogApi.getOwnedGames(
           conn.config as GogConnectionConfig,
           conn.id,
+          conn.id,
+        );
+        break;
+      case 'blob':
+        fetch$ = this.blobApi.getOwnedGames(
+          conn.config as BlobConnectionConfig,
           conn.id,
         );
         break;

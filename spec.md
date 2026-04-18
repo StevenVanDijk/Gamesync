@@ -353,3 +353,21 @@ This file contains user stories for the Gamesync project. Every change must be r
 - [ ] Clicking the cover image opens the Steam store page in a new tab
 - [ ] The link is only shown/active when a Steam store URL is available
 - [ ] A visible cursor and hover effect indicate the image is clickable
+
+---
+
+### US-028: CSV game list via Azure Blob Storage
+**As a** user,
+**I want** to point Gamesync at a CSV file on Azure Blob Storage (with a SAS URL),
+**So that** I can maintain a master game list covering stores that have no direct connector (Epic, Battle.net, Ubisoft, etc.) and have it merged into my unified library.
+
+**Acceptance criteria:**
+- [ ] User can add a "CSV (Azure Blob)" connection with a label and a SAS URL
+- [ ] On sync the backend fetches the CSV from the SAS URL and parses it
+- [ ] CSV must have columns: `name`, `source`, `playtime` (header row required)
+- [ ] `source` is a free-text store name (steam, gog, epic, battlenet, ubisoft, etc.)
+- [ ] `playtime` is the total hours played (decimal)
+- [ ] Parsed games are merged with games already in the library by normalised title
+- [ ] Where a CSV game matches an existing library game, `hoursPlayed` is set to `max(existing, csv)`; the existing game (with its metadata) is kept
+- [ ] Where a CSV game has no matching library game it is added as a new entry tagged with its `source`
+- [ ] The SAS URL is stored in the connection config; no server-side secret is required

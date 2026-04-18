@@ -40,6 +40,7 @@ import { StoreType } from '../../../core/models/store-connection.model';
           <mat-select formControlName="type">
             <mat-option value="steam">Steam</mat-option>
             <mat-option value="gog">GOG</mat-option>
+            <mat-option value="blob">CSV (Azure Blob Storage)</mat-option>
           </mat-select>
         </mat-form-field>
 
@@ -115,6 +116,35 @@ import { StoreType } from '../../../core/models/store-connection.model';
           @if (gogError()) {
             <p class="error-text">{{ gogError() }}</p>
           }
+        }
+
+        @if (form.get('type')?.value === 'blob') {
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Label</mat-label>
+            <input matInput formControlName="label" placeholder="e.g. My Game List" />
+            @if (form.get('label')?.hasError('required')) {
+              <mat-error>Label is required</mat-error>
+            }
+          </mat-form-field>
+
+          <div class="oauth-section">
+            <p class="oauth-info">
+              <mat-icon class="info-icon">info</mat-icon>
+              <span>
+                Paste the <strong>Azure Blob SAS URL</strong> of your CSV file.
+                The CSV must have columns: <code>name</code>, <code>source</code>, <code>playtime</code>.
+              </span>
+            </p>
+          </div>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Blob SAS URL</mat-label>
+            <input matInput formControlName="blobUrl"
+              placeholder="https://mystorage.blob.core.windows.net/container/games.csv?sv=…" />
+            @if (form.get('blobUrl')?.hasError('required')) {
+              <mat-error>SAS URL is required</mat-error>
+            }
+          </mat-form-field>
         }
       </form>
     </mat-dialog-content>
@@ -193,6 +223,7 @@ export class AddConnectionDialogComponent {
     label: ['', Validators.required],
     apiKey: [''],
     steamId: ['', Validators.pattern(/^\d{17}$/)],
+    blobUrl: [''],
   });
 
   constructor() {
@@ -200,18 +231,23 @@ export class AddConnectionDialogComponent {
       const apiKey = this.form.get('apiKey')!;
       const steamId = this.form.get('steamId')!;
       const label = this.form.get('label')!;
+      const blobUrl = this.form.get('blobUrl')!;
+
+      apiKey.clearValidators();
+      steamId.clearValidators();
+      label.clearValidators();
+      blobUrl.clearValidators();
+
       if (type === 'steam') {
         label.setValidators([Validators.required]);
         apiKey.setValidators([Validators.required]);
         steamId.setValidators([Validators.required, Validators.pattern(/^\d{17}$/)]);
-      } else {
-        label.clearValidators();
-        apiKey.clearValidators();
-        steamId.clearValidators();
+      } else if (type === 'blob') {
+        label.setValidators([Validators.required]);
+        blobUrl.setValidators([Validators.required]);
       }
-      label.updateValueAndValidity();
-      apiKey.updateValueAndValidity();
-      steamId.updateValueAndValidity();
+
+      [label, apiKey, steamId, blobUrl].forEach(c => c.updateValueAndValidity());
       this.gogCode = '';
       this.gogError.set('');
     });
@@ -220,17 +256,20 @@ export class AddConnectionDialogComponent {
 
   submit(): void {
     if (this.form.invalid) return;
-    const { label, apiKey, steamId } = this.form.getRawValue();
-    this.connectionSvc.add('steam', label!, { apiKey: apiKey!, steamId: steamId! });
+    const { type, label, apiKey, steamId, blobUrl } = this.form.getRawValue();
+
+    if (type === 'steam') {
+      this.connectionSvc.add('steam', label!, { apiKey: apiKey!, steamId: steamId! });
+    } else if (type === 'blob') {
+      this.connectionSvc.add('blob', label!, { url: blobUrl! });
+    }
     this.dialogRef.close(true);
   }
 
   openGogLogin(): void {
     this.gogApi.getAuthUrl().subscribe({
       next: url => window.open(url, '_blank', 'noopener,noreferrer'),
-      error: () => {
-        this.gogError.set('Failed to fetch GOG login URL. Please try again.');
-      },
+      error: () => { this.gogError.set('Failed to fetch GOG login URL. Please try again.'); },
     });
   }
 
