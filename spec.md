@@ -389,6 +389,22 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 ---
 
+### US-031: Light-bulb recommendation button
+**As a** user,
+**I want** a light-bulb button that navigates me to a recommended game I haven't visited yet,
+**So that** I can discover under-played games in my library that match my taste based on what I've played the most.
+
+**Acceptance criteria:**
+- [ ] A light-bulb icon button appears on every game card (list, card, and compact views) and on the game detail page
+- [ ] Pressing the button navigates to the detail page of a recommended game
+- [ ] Recommendations are drawn from games with low/no personal playtime, scored by tag similarity to the user's most-played games (weighted by hours) multiplied by the community score
+- [ ] Games with no matching tags or a community score of zero are excluded from recommendations
+- [ ] Each button press navigates to a different game — the cycle never repeats an already-visited recommendation until all candidates have been shown, at which point it resets
+- [ ] Clicking the button on a card does not also navigate to that card's own game detail page (click event is stopped)
+- [ ] If no qualifying recommendations exist, pressing the button has no effect
+
+---
+
 ### US-030: Skip re-fetching metadata for Steam-unmatched games
 **As a** user,
 **I want** games that were searched on Steam but had no match to be permanently skipped on subsequent syncs,

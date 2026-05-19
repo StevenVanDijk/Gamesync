@@ -5,12 +5,13 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatButtonModule } from '@angular/material/button';
 import { Game } from '../../../core/models/game.model';
 
 @Component({
   selector: 'app-game-card',
   standalone: true,
-  imports: [CommonModule, MatCardModule, MatChipsModule, MatIconModule, MatTooltipModule, MatProgressSpinnerModule],
+  imports: [CommonModule, MatCardModule, MatChipsModule, MatIconModule, MatTooltipModule, MatProgressSpinnerModule, MatButtonModule],
   template: `
     <mat-card
       class="game-card"
@@ -52,6 +53,14 @@ import { Game } from '../../../core/models/game.model';
               <span class="list-score-unknown">?</span>
             }
           </span>
+          <button
+            class="recommend-btn list-bulb-btn"
+            (click)="$event.stopPropagation(); recommend.emit()"
+            [matTooltip]="'Get a game recommendation'"
+            aria-label="Get a game recommendation"
+          >
+            <mat-icon class="bulb-icon">lightbulb</mat-icon>
+          </button>
         </div>
       } @else {
         <!-- ── Card / compact card ── -->
@@ -78,6 +87,14 @@ import { Game } from '../../../core/models/game.model';
               {{ game().metadata?.communityScore }}%
             </span>
           }
+          <button
+            class="recommend-btn card-bulb-btn"
+            (click)="$event.stopPropagation(); recommend.emit()"
+            [matTooltip]="'Get a game recommendation'"
+            aria-label="Get a game recommendation"
+          >
+            <mat-icon class="bulb-icon">lightbulb</mat-icon>
+          </button>
         </div>
         <mat-card-content>
           <h3 class="game-title" [title]="game().name">{{ game().name }}</h3>
@@ -210,6 +227,49 @@ import { Game } from '../../../core/models/game.model';
     .score-mixed    { background: #ff9800; }
     .score-negative { background: #f44336; }
 
+    /* ── Recommend (light-bulb) button ── */
+    .recommend-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffd54f;
+      opacity: 0.55;
+      transition: opacity 0.15s, color 0.15s;
+      border-radius: 50%;
+    }
+    .recommend-btn:hover { opacity: 1; color: #ffee58; }
+    /* List-view bulb: compact, fixed 24×24 */
+    .list-bulb-btn {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+    }
+    .list-bulb-btn .bulb-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+      line-height: 16px;
+    }
+    /* Card-view bulb: absolute overlay at top-left */
+    .card-bulb-btn {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 28px;
+      height: 28px;
+      background: rgba(0, 0, 0, 0.35);
+    }
+    .card-bulb-btn .bulb-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      line-height: 18px;
+    }
+
     /* ── Card (default) image area ── */
     .card-image-wrapper {
       position: relative;
@@ -324,6 +384,7 @@ import { Game } from '../../../core/models/game.model';
 export class GameCardComponent {
   game = input.required<Game>();
   selected = output<Game>();
+  recommend = output<void>();
   compact = input(false);
   list = input(false);
   metadataLoading = input(false);

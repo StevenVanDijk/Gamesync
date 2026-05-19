@@ -8,9 +8,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { GameLibraryService } from '../../core/services/game-library.service';
 import { SteamApiService } from '../../core/services/steam-api.service';
 import { StoreConnectionService } from '../../core/services/store-connection.service';
+import { RecommendationService } from '../../core/services/recommendation.service';
 import { SteamCandidate } from '../../core/models/game.model';
 
 @Component({
@@ -24,12 +26,24 @@ import { SteamCandidate } from '../../core/models/game.model';
     MatProgressSpinnerModule,
     MatProgressBarModule,
     MatDividerModule,
+    MatTooltipModule,
   ],
   template: `
     <div class="detail-container">
-      <button mat-button (click)="back()" class="back-btn">
-        <mat-icon>arrow_back</mat-icon> Library
-      </button>
+      <div class="header-actions">
+        <button mat-button (click)="back()" class="back-btn">
+          <mat-icon>arrow_back</mat-icon> Library
+        </button>
+        <button
+          mat-icon-button
+          class="detail-bulb-btn"
+          (click)="goToRecommendation()"
+          matTooltip="Get a game recommendation"
+          aria-label="Get a game recommendation"
+        >
+          <mat-icon>lightbulb</mat-icon>
+        </button>
+      </div>
 
       @if (loading()) {
         <div class="loading">
@@ -148,7 +162,15 @@ import { SteamCandidate } from '../../core/models/game.model';
   `,
   styles: [`
     .detail-container { padding: 16px; max-width: 960px; margin: 0 auto; }
-    .back-btn { margin-bottom: 16px; }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 16px;
+    }
+    .back-btn { flex-shrink: 0; }
+    .detail-bulb-btn { color: #ffd54f; opacity: 0.7; }
+    .detail-bulb-btn:hover { opacity: 1; }
     .loading, .not-found {
       display: flex;
       flex-direction: column;
@@ -260,6 +282,7 @@ export class GameDetailComponent implements OnInit {
   private readonly librarySvc = inject(GameLibraryService);
   private readonly steamApi = inject(SteamApiService);
   private readonly connectionSvc = inject(StoreConnectionService);
+  private readonly recommendationSvc = inject(RecommendationService);
   private readonly destroyRef = inject(DestroyRef);
 
   /** Route param — initialised from snapshot so computed() can use it as a stable dependency. */
@@ -354,6 +377,13 @@ export class GameDetailComponent implements OnInit {
     if (score >= 70) return 'primary';
     if (score >= 40) return 'accent';
     return 'warn';
+  }
+
+  goToRecommendation(): void {
+    const game = this.recommendationSvc.next();
+    if (game) {
+      this.router.navigate(['/library', game.id]);
+    }
   }
 
   back(): void {
