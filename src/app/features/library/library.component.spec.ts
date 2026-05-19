@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { signal } from '@angular/core';
 import { of } from 'rxjs';
@@ -7,12 +7,16 @@ import { vi } from 'vitest';
 import { LibraryComponent } from './library.component';
 import { GameLibraryService } from '../../core/services/game-library.service';
 import { StoreConnectionService } from '../../core/services/store-connection.service';
+import { RecommendationService } from '../../core/services/recommendation.service';
 import { Game } from '../../core/models/game.model';
 
 const GAME_1: Game = { id: 'c1_440', appId: '440', storeId: 'c1', name: 'TF2', hoursPlayed: 200 };
 const GAME_2: Game = {
   id: 'c1_730', appId: '730', storeId: 'c1', name: 'CS2', hoursPlayed: 50,
   metadata: { yearPublished: 2023, tags: ['Shooter'] },
+};
+const REC_GAME: Game = {
+  id: 'c1_rec', appId: 'rec', storeId: 'c1', name: 'RecommendedGame', hoursPlayed: 0,
 };
 
 function makeLibrarySvc(games: Game[]) {
@@ -44,15 +48,17 @@ describe('LibraryComponent (US-001)', () => {
   let component: LibraryComponent;
   let librarySvc: ReturnType<typeof makeLibrarySvc>;
 
-  async function createComponent(games: Game[], connectionCount: number) {
+  async function createComponent(games: Game[], connectionCount: number, recGame: Game | null = null) {
     librarySvc = makeLibrarySvc(games);
+    const recommendationSvc = { next: vi.fn().mockReturnValue(recGame) };
     await TestBed.configureTestingModule({
       imports: [LibraryComponent],
       providers: [
-        provideRouter([]),
+        provideRouter([{ path: 'library/:id', component: LibraryComponent }]),
         provideAnimationsAsync(),
         { provide: GameLibraryService, useValue: librarySvc },
         { provide: StoreConnectionService, useValue: makeConnectionSvc(connectionCount) },
+        { provide: RecommendationService, useValue: recommendationSvc },
       ],
     }).compileComponents();
 
@@ -147,5 +153,37 @@ describe('LibraryComponent (US-001)', () => {
 
     const card = fixture.nativeElement.querySelector('app-game-card mat-card') as HTMLElement;
     expect(card.classList.contains('list')).toBe(true);
+  });
+
+  it('should show a recommend (lightbulb) button on each game card (US-031)', async () => {
+    await createComponent([GAME_1, GAME_2], 1);
+    const bulbBtns = fixture.nativeElement.querySelectorAll('button[aria-label="Get a game recommendation"]');
+    expect(bulbBtns.length).toBe(2);
+  });
+
+  it('should navigate to the recommended game when recommend button is clicked (US-031)', async () => {
+    await createComponent([GAME_1], 1, REC_GAME);
+    const router = TestBed.inject(Router);
+    const navSpy = vi.spyOn(router, 'navigate');
+
+    const bulbBtn = fixture.nativeElement.querySelector('button[aria-label="Get a game recommendation"]') as HTMLButtonElement;
+    bulbBtn.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(navSpy).toHaveBeenCalledWith(['/library', REC_GAME.id]);
+  });
+
+  it('should not navigate when there are no recommendations (US-031)', async () => {
+    await createComponent([GAME_1], 1, null);
+    const router = TestBed.inject(Router);
+    const navSpy = vi.spyOn(router, 'navigate');
+
+    const bulbBtn = fixture.nativeElement.querySelector('button[aria-label="Get a game recommendation"]') as HTMLButtonElement;
+    bulbBtn.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(navSpy).not.toHaveBeenCalled();
   });
 });

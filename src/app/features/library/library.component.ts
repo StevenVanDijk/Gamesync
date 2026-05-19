@@ -13,6 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { GameLibraryService } from '../../core/services/game-library.service';
 import { StoreConnectionService } from '../../core/services/store-connection.service';
+import { RecommendationService } from '../../core/services/recommendation.service';
 import { GameCardComponent } from '../../shared/components/game-card/game-card.component';
 import { Game } from '../../core/models/game.model';
 
@@ -139,6 +140,7 @@ type ViewMode = 'card' | 'compact' | 'list';
               [metadataLoading]="librarySvc.fetchingMetadataIds().has(game.id)"
               [connectionColor]="connectionColorMap().get(game.storeId) ?? 'transparent'"
               (selected)="openGame($event)"
+              (recommend)="openRecommendation()"
             />
           }
         </div>
@@ -235,6 +237,7 @@ type ViewMode = 'card' | 'compact' | 'list';
 export class LibraryComponent implements OnInit {
   protected readonly librarySvc = inject(GameLibraryService);
   protected readonly connectionSvc = inject(StoreConnectionService);
+  private readonly recommendationSvc = inject(RecommendationService);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
 
@@ -302,6 +305,13 @@ export class LibraryComponent implements OnInit {
 
   openGame(game: Game): void {
     this.router.navigate(['/library', game.id]);
+  }
+
+  openRecommendation(): void {
+    const game = this.recommendationSvc.next();
+    if (game) {
+      this.router.navigate(['/library', game.id]);
+    }
   }
 
   goToConnections(): void {

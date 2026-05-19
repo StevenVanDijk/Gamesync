@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter, ActivatedRoute } from '@angular/router';
+import { provideRouter, ActivatedRoute, Router } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { signal } from '@angular/core';
 import { of } from 'rxjs';
@@ -8,6 +8,7 @@ import { GameDetailComponent } from './game-detail.component';
 import { GameLibraryService } from '../../core/services/game-library.service';
 import { SteamApiService } from '../../core/services/steam-api.service';
 import { StoreConnectionService } from '../../core/services/store-connection.service';
+import { RecommendationService } from '../../core/services/recommendation.service';
 import { Game, SteamCandidate } from '../../core/models/game.model';
 
 const GAME_WITH_META: Game = {
@@ -45,6 +46,7 @@ describe('GameDetailComponent (US-004, US-005)', () => {
     game: Game | undefined,
     storeType: 'steam' | 'gog' = 'steam',
     cachedCandidates: SteamCandidate[] | null = null,
+    recGame: Game | null = null,
   ) {
     const gamesSignal = signal<Game[]>(game ? [game] : []);
 
@@ -91,14 +93,17 @@ describe('GameDetailComponent (US-004, US-005)', () => {
       ),
     };
 
+    const recommendationSvc = { next: vi.fn().mockReturnValue(recGame) };
+
     await TestBed.configureTestingModule({
       imports: [GameDetailComponent],
       providers: [
-        provideRouter([]),
+        provideRouter([{ path: 'library/:id', component: GameDetailComponent }]),
         provideAnimationsAsync(),
         { provide: GameLibraryService, useValue: librarySvc },
         { provide: SteamApiService, useValue: steamApiSpy },
         { provide: StoreConnectionService, useValue: connectionSvc },
+        { provide: RecommendationService, useValue: recommendationSvc },
         {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: { get: () => game?.id ?? 'missing' } } },
@@ -244,5 +249,39 @@ describe('GameDetailComponent (US-004, US-005)', () => {
     const retryBtn = fixture.nativeElement.querySelector('button[mat-stroked-button]') as HTMLButtonElement;
     retryBtn.click();
     expect(librarySvc.retrySearch).toHaveBeenCalledWith(GOG_GAME_NO_META);
+  });
+
+  // ── US-031: recommendation button ────────────────────────────────────────
+
+  it('should show a lightbulb recommend button in the detail header (US-031)', async () => {
+    await createComponent(GAME_WITH_META);
+    const bulbBtn = fixture.nativeElement.querySelector('button[aria-label="Get a game recommendation"]') as HTMLButtonElement | null;
+    expect(bulbBtn).toBeTruthy();
+  });
+
+  it('should navigate to the recommended game when the lightbulb button is clicked (US-031)', async () => {
+    await createComponent(GAME_WITH_META, 'steam', null, GAME_NO_META);
+    const router = TestBed.inject(Router);
+    const navSpy = vi.spyOn(router, 'navigate');
+
+    const bulbBtn = fixture.nativeElement.querySelector('button[aria-label="Get a game recommendation"]') as HTMLButtonElement;
+    bulbBtn.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(navSpy).toHaveBeenCalledWith(['/library', GAME_NO_META.id]);
+  });
+
+  it('should not navigate when there are no recommendations (US-031)', async () => {
+    await createComponent(GAME_WITH_META, 'steam', null, null);
+    const router = TestBed.inject(Router);
+    const navSpy = vi.spyOn(router, 'navigate');
+
+    const bulbBtn = fixture.nativeElement.querySelector('button[aria-label="Get a game recommendation"]') as HTMLButtonElement;
+    bulbBtn.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(navSpy).not.toHaveBeenCalled();
   });
 });
