@@ -108,7 +108,10 @@ import { SteamCandidate } from '../../core/models/game.model';
                 <span class="tags-label">Tags</span>
                 <div class="tags">
                   @for (tag of game()!.metadata!.tags!; track tag) {
-                    <mat-chip>{{ tag }}</mat-chip>
+                    <mat-chip
+                      [class.profile-tag]="(tagProfile().get(tag) ?? 0) > 0"
+                      [matTooltip]="(tagProfile().get(tag) ?? 0) > 0 ? 'Matches your taste profile' : ''"
+                    >{{ tag }}</mat-chip>
                   }
                 </div>
               </div>
@@ -236,6 +239,11 @@ import { SteamCandidate } from '../../core/models/game.model';
     .score-value { font-weight: 700; font-size: 16px; }
     .tags-section { display: flex; flex-direction: column; gap: 6px; }
     .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    ::ng-deep .profile-tag {
+      background-color: rgba(255, 213, 79, 0.18) !important;
+      color: #ffd54f !important;
+      border: 1px solid rgba(255, 213, 79, 0.45) !important;
+    }
     .loading-meta { font-size: 13px; color: #888; }
     .no-metadata-note { font-size: 13px; color: #888; margin: 0 0 6px; }
     .btn-spinner { display: inline-block; vertical-align: middle; }
@@ -314,6 +322,9 @@ export class GameDetailComponent implements OnInit {
     this.librarySvc.fetchingMetadataIds().has(this.id),
   );
 
+  /** Tags that appear in the user's anchor taste profile, for highlighting. */
+  protected readonly tagProfile = computed(() => this.recommendationSvc.getTagProfile());
+
   /** Steam store URL when available — for Steam games, or non-Steam games with a confirmed match. */
   protected readonly steamStoreUrl = computed(() => {
     const g = this.game();
@@ -380,6 +391,8 @@ export class GameDetailComponent implements OnInit {
   }
 
   goToRecommendation(): void {
+    // Ensure the currently displayed game is not recommended back to itself
+    this.recommendationSvc.markVisited(this.id);
     const game = this.recommendationSvc.next();
     if (game) {
       this.router.navigate(['/library', game.id]);
