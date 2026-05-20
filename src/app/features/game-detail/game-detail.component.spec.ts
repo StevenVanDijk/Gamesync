@@ -9,6 +9,7 @@ import { GameLibraryService } from '../../core/services/game-library.service';
 import { SteamApiService } from '../../core/services/steam-api.service';
 import { StoreConnectionService } from '../../core/services/store-connection.service';
 import { RecommendationService } from '../../core/services/recommendation.service';
+import { SettingsService } from '../../core/services/settings.service';
 import { Game, SteamCandidate } from '../../core/models/game.model';
 
 const GAME_WITH_META: Game = {
@@ -93,7 +94,12 @@ describe('GameDetailComponent (US-004, US-005)', () => {
       ),
     };
 
-    const recommendationSvc = { next: vi.fn().mockReturnValue(recGame) };
+    const recommendationSvc = {
+      next: vi.fn().mockReturnValue(recGame),
+      markVisited: vi.fn(),
+      getTagProfile: vi.fn().mockReturnValue(new Map()),
+    };
+    const settingsSvc = { settings: signal({ tagWeight: 1.0, scoreWeight: 1.0 }) };
 
     await TestBed.configureTestingModule({
       imports: [GameDetailComponent],
@@ -104,6 +110,7 @@ describe('GameDetailComponent (US-004, US-005)', () => {
         { provide: SteamApiService, useValue: steamApiSpy },
         { provide: StoreConnectionService, useValue: connectionSvc },
         { provide: RecommendationService, useValue: recommendationSvc },
+        { provide: SettingsService, useValue: settingsSvc },
         {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: { get: () => game?.id ?? 'missing' } } },
@@ -116,7 +123,7 @@ describe('GameDetailComponent (US-004, US-005)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    return { steamApiSpy, librarySvc, connectionSvc };
+    return { steamApiSpy, librarySvc, connectionSvc, recommendationSvc };
   }
 
   it('should display the game name (US-004)', async () => {
@@ -260,7 +267,7 @@ describe('GameDetailComponent (US-004, US-005)', () => {
   });
 
   it('should navigate to the recommended game when the lightbulb button is clicked (US-031)', async () => {
-    await createComponent(GAME_WITH_META, 'steam', null, GAME_NO_META);
+    const { recommendationSvc } = await createComponent(GAME_WITH_META, 'steam', null, GAME_NO_META);
     const router = TestBed.inject(Router);
     const navSpy = vi.spyOn(router, 'navigate');
 
@@ -269,6 +276,8 @@ describe('GameDetailComponent (US-004, US-005)', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
+    // Should mark the current game as visited before fetching the next recommendation
+    expect((recommendationSvc as any).markVisited).toHaveBeenCalledWith(GAME_WITH_META.id);
     expect(navSpy).toHaveBeenCalledWith(['/library', GAME_NO_META.id]);
   });
 

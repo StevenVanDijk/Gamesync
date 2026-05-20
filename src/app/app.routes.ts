@@ -26,5 +26,10 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/logs/logs.component').then(m => m.LogsComponent),
   },
+  {
+    path: 'settings',
+    loadComponent: () =>
+      import('./features/settings/settings.component').then(m => m.SettingsComponent),
+  },
   { path: '**', redirectTo: 'library' },
 ];

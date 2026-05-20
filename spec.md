@@ -397,11 +397,40 @@ This file contains user stories for the Gamesync project. Every change must be r
 **Acceptance criteria:**
 - [ ] A light-bulb icon button appears on every game card (list, card, and compact views) and on the game detail page
 - [ ] Pressing the button navigates to the detail page of a recommended game
-- [ ] Recommendations are drawn from games with low/no personal playtime, scored by tag similarity to the user's most-played games (weighted by hours) multiplied by the community score
+- [ ] Anchor games (the top 10% of played games, capped at 50) define the taste profile used for recommendations
+- [ ] Recommendations are drawn from games with fewer hours than the least-played anchor game, scored by tag similarity × community score (both configurable via US-033)
 - [ ] Games with no matching tags or a community score of zero are excluded from recommendations
 - [ ] Each button press navigates to a different game — the cycle never repeats an already-visited recommendation until all candidates have been shown, at which point it resets
+- [ ] Pressing the button from a game's own detail page never navigates back to that same game
 - [ ] Clicking the button on a card does not also navigate to that card's own game detail page (click event is stopped)
 - [ ] If no qualifying recommendations exist, pressing the button has no effect
+
+---
+
+### US-032: Highlight contributing tags on the recommended game's detail page
+**As a** user,
+**I want** the tags that contributed to a game's recommendation to be shown in a distinct colour on the game detail page,
+**So that** I can immediately see why this game was suggested.
+
+**Acceptance criteria:**
+- [ ] Tags that appear in the user's taste profile (anchor games) are shown in amber/gold on the game detail page
+- [ ] Tags not in the taste profile retain their default styling
+- [ ] The highlighted tags are determined at render time from the current anchor profile, not stored separately
+
+---
+
+### US-033: Configurable recommendation weights
+**As a** user,
+**I want** to adjust how much tag similarity versus community score influence recommendations,
+**So that** I can tune the algorithm to suit my preferences.
+
+**Acceptance criteria:**
+- [ ] A Settings page is accessible from the main navigation
+- [ ] Two sliders let the user independently set the tag-overlap influence (0.1–3.0) and community-score influence (0.1–3.0)
+- [ ] Both sliders default to 1.0 (the balanced setting, matching the original multiplicative formula)
+- [ ] Settings are persisted to localStorage and restored on next load
+- [ ] A "Reset to defaults" button restores both sliders to 1.0
+- [ ] Changes take effect immediately (next recommendation uses the updated weights)
 
 ---
 
