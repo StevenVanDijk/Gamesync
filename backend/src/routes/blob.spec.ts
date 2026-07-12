@@ -43,17 +43,22 @@ describe('POST /api/blob/library (US-028, US-034, US-035)', () => {
     expect(mockGet).not.toHaveBeenCalled();
   });
 
-  it.each([
-    'http://mystorage.blob.core.windows.net/c/games.csv',
-    'https://localhost/games.csv',
-    'https://mystorage.blob.core.windows.net.evil.example/games.csv',
-    'https://user:password@mystorage.blob.core.windows.net/games.csv',
-    'https://mystorage.blob.core.windows.net:8443/games.csv',
-  ])('should reject invalid destinations without an upstream request (US-034): %s', async url => {
-    const res = await request(app).post('/api/blob/library').send({ url });
-    expect(res.status).toBe(400);
-    expect(mockGet).not.toHaveBeenCalled();
-  });
+    it('should return 400 for invalid Azure Blob URLs (US-034)', async () => {
+      const invalidUrls = [
+        'http://mystorage.blob.core.windows.net/c/games.csv?sv=test&sig=secret', // HTTP
+        'https://localhost/games.csv', // Invalid hostname
+        'https://mystorage.blob.core.windows.net.evil.example/games.csv', // Invalid hostname
+        'https://user:password@mystorage.blob.core.windows.net/games.csv', // Userinfo
+        'https://mystorage.blob.core.windows.net:8443/games.csv', // Non-standard port
+        'https://mystorage.blob.core.windows.net/games.csv?query=string', // Extra query string params not part of SAS
+      ];
+      for (const url of invalidUrls) {
+        const res = await request(app).post('/api/blob/library').send({ url });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/valid HTTPS Azure Blob URL/i);
+        expect(mockGet).not.toHaveBeenCalled();
+      }
+    });
 
   it('should fetch a bounded non-redirecting blob request from the body (US-034, US-035)', async () => {
     mockGet.mockResolvedValueOnce({ data: CSV_BASIC });

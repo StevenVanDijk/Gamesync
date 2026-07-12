@@ -34,7 +34,11 @@ function forwardError(res: Response, err: unknown): void {
     } else if (err.code === 'ECONNABORTED' || err.code === 'ERR_CANCELED') {
       res.status(504).json({ error: 'Upstream request timed out' });
     } else {
-      res.status(502).json({ error: 'Upstream request failed' });
+      // Any other axios error (e.g. 3xx, 4xx, 5xx) not specifically handled above
+      // is treated as a server error from the upstream.
+      const status = err.response?.status ?? 502; // Default to 502 if no response status
+      console.error(`[Blob] upstream HTTP error ${status}`);
+      res.status(status).json({ error: 'Upstream request failed' });
     }
   } else {
     console.error('[Blob] unexpected upstream error');
