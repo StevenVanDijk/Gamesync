@@ -1,5 +1,5 @@
 import { inject, Injectable, InjectionToken } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { Game } from '../models/game.model';
@@ -27,11 +27,9 @@ export class BlobApiService {
   private readonly logger = inject(LoggingService);
 
   getOwnedGames(config: BlobConnectionConfig, connectionId: string): Observable<Game[]> {
-    this.logger.info(TAG, `GET library (url length=${config.url.length})`);
+    this.logger.info(TAG, `POST library (url length=${config.url.length})`);
     return this.http
-      .get<{ games: CsvGame[] }>(`${this.backendUrl}/library`, {
-        params: new HttpParams().set('url', encodeURIComponent(config.url)),
-      })
+      .post<{ games: CsvGame[] }>(`${this.backendUrl}/library`, { url: config.url })
       .pipe(
         map(res => {
           this.logger.info(TAG, `library: ${res.games.length} game(s) received`);
@@ -46,11 +44,7 @@ export class BlobApiService {
           }));
         }),
         catchError(err => {
-          this.logger.error(
-            TAG,
-            `library failed — HTTP ${err?.status ?? '?'}: ${err?.message ?? err}`,
-            err,
-          );
+          this.logger.error(TAG, `library failed — HTTP ${err?.status ?? '?'}`);
           throw err;
         }),
       );

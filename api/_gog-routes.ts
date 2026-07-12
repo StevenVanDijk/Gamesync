@@ -36,22 +36,18 @@ function forwardError(res: Response, err: unknown): void {
   if (axios.isAxiosError(err)) {
     if (err.response) {
       const status = err.response.status;
-      const detail =
-        typeof err.response.data === 'string'
-          ? err.response.data.slice(0, 200)
-          : JSON.stringify(err.response.data ?? {});
-      console.error(`[GOG] upstream HTTP ${status}:`, detail);
-      res.status(status).json({ error: err.response.statusText, detail });
+      console.error(`[GOG] upstream HTTP ${status}`);
+      res.status(status).json({ error: err.response.statusText });
     } else if (err.code === 'ECONNABORTED' || err.code === 'ERR_CANCELED') {
-      console.error('[GOG] upstream request timed out:', err.message);
+      console.error('[GOG] upstream request timed out');
       res.status(504).json({ error: 'Upstream request timed out' });
     } else {
-      console.error('[GOG] axios error (no response):', err.code, err.message);
-      res.status(502).json({ error: 'Upstream request failed', detail: err.message });
+      console.error('[GOG] upstream request failed', err.code);
+      res.status(502).json({ error: 'Upstream request failed' });
     }
   } else {
-    console.error('[GOG] unexpected error:', err);
-    res.status(502).json({ error: 'Upstream request failed', detail: String(err) });
+    console.error('[GOG] unexpected upstream error');
+    res.status(502).json({ error: 'Upstream request failed' });
   }
 }
 
@@ -76,6 +72,7 @@ gogRouter.get('/auth-url', (_req: Request, res: Response) => {
  * Body: { code: string }
  */
 gogRouter.post('/token', async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store');
   const { code } = req.body as { code?: string };
   if (!code) {
     res.status(400).json({ error: 'code is required' });
@@ -126,6 +123,7 @@ gogRouter.post('/token', async (req: Request, res: Response) => {
  * Body: { refreshToken: string }
  */
 gogRouter.post('/refresh', async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store');
   const { refreshToken } = req.body as { refreshToken?: string };
   if (!refreshToken) {
     res.status(400).json({ error: 'refreshToken is required' });
@@ -153,22 +151,16 @@ gogRouter.post('/refresh', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/gog/library
- * Returns the list of owned games for a GOG account.
- * Query: accessToken=<token>
- *
- * Uses embed.gog.com/account/getFilteredProducts (mediaType=1 = games).
- * The username param is no longer required but kept for backwards compatibility.
- */
 gogRouter.get('/library', async (req: Request, res: Response) => {
-  const { accessToken } = req.query as { accessToken?: string };
+  const authorization = req.get('Authorization');
+  const accessToken = authorization?.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
 
   if (!accessToken) {
-    res.status(400).json({ error: 'accessToken query param is required' });
+    res.status(400).json({ error: 'authorization header is required' });
     return;
   }
 
+  res.set('Cache-Control', 'no-store');
   const authHeader = `Bearer ${accessToken}`;
 
   try {

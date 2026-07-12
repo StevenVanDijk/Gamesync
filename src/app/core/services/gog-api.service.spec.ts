@@ -20,13 +20,15 @@ const VALID_CONFIG: GogConnectionConfig = {
   expiresAt: Date.now() + 3_600_000, // 1 hour from now
 };
 
-describe('GogApiService (US-023)', () => {
+describe('GogApiService (US-023, US-035)', () => {
   let service: GogApiService;
   let httpMock: HttpTestingController;
   let connectionSvc: Partial<StoreConnectionService>;
+  let logger: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     connectionSvc = { update: vi.fn() };
+    logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
     TestBed.configureTestingModule({
       providers: [
@@ -34,7 +36,7 @@ describe('GogApiService (US-023)', () => {
         provideHttpClientTesting(),
         { provide: GOG_BACKEND_URL, useValue: TEST_BACKEND },
         { provide: StoreConnectionService, useValue: connectionSvc },
-        { provide: LoggingService, useValue: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
+        { provide: LoggingService, useValue: logger },
       ],
     });
 
@@ -83,12 +85,13 @@ describe('GogApiService (US-023)', () => {
   // ── getOwnedGames ────────────────────────────────────────────────────────
 
   describe('getOwnedGames', () => {
-    it('should fetch library and map to Game[]', async () => {
+    it('should send the access token in authorization and map games (US-035)', async () => {
       const p = firstValueFrom(service.getOwnedGames(VALID_CONFIG, 'conn1', 'conn1'));
 
       const req = httpMock.expectOne(r => r.url === `${TEST_BACKEND}/library`);
-      expect(req.request.params.get('accessToken')).toBe('at_valid');
-      expect(req.request.params.has('username')).toBe(false);
+      expect(req.request.params.has('accessToken')).toBe(false);
+      expect(req.request.headers.get('Authorization')).toBe('Bearer at_valid');
+      expect(req.request.urlWithParams).not.toContain('at_valid');
 
       req.flush({
         games: [
@@ -110,6 +113,23 @@ describe('GogApiService (US-023)', () => {
 
       const cyber = games[1];
       expect(cyber.metadata).toBeUndefined();
+    });
+
+    it('should omit credential-bearing HTTP error details from logs (US-035)', async () => {
+      const resultPromise = firstValueFrom(
+        service.getOwnedGames(VALID_CONFIG, 'conn1', 'conn1'),
+      ).catch(() => undefined);
+
+      httpMock.expectOne(r => r.url === `${TEST_BACKEND}/library`).flush(
+        { error: 'Unauthorized', detail: 'at_valid' },
+        { status: 401, statusText: 'Unauthorized' },
+      );
+      await resultPromise;
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'GOG',
+        'library failed (username=TestGogUser) — HTTP 401',
+      );
     });
 
     it('should refresh an expired token before fetching library', async () => {
@@ -134,7 +154,8 @@ describe('GogApiService (US-023)', () => {
 
       // Then library call should use the refreshed token
       const libReq = httpMock.expectOne(r => r.url === `${TEST_BACKEND}/library`);
-      expect(libReq.request.params.get('accessToken')).toBe('new_at');
+      expect(libReq.request.params.has('accessToken')).toBe(false);
+      expect(libReq.request.headers.get('Authorization')).toBe('Bearer new_at');
       libReq.flush({ games: [] });
 
       const games = await p;

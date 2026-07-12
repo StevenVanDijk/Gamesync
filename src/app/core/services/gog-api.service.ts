@@ -1,5 +1,5 @@
 import { inject, Injectable, InjectionToken } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, switchMap, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { Game } from '../models/game.model';
@@ -54,7 +54,7 @@ export class GogApiService {
       .pipe(
         map(r => r.url),
         catchError(err => {
-          this.logger.error(TAG, `auth-url failed — HTTP ${err?.status ?? '?'}: ${err?.message ?? err}`, err);
+          this.logger.error(TAG, `auth-url failed — HTTP ${err?.status ?? '?'}`);
           throw err;
         }),
       );
@@ -65,7 +65,7 @@ export class GogApiService {
     this.logger.info(TAG, 'exchanging authorization code for tokens');
     return this.http.post<TokenResponse>(`${this.backendUrl}/token`, { code }).pipe(
       catchError(err => {
-        this.logger.error(TAG, `token exchange failed — HTTP ${err?.status ?? '?'}: ${err?.message ?? err}`, err);
+        this.logger.error(TAG, `token exchange failed — HTTP ${err?.status ?? '?'}`);
         throw err;
       }),
     );
@@ -80,7 +80,7 @@ export class GogApiService {
         this.logger.info(TAG, `GET library (username=${config.username})`);
         return this.http
           .get<{ games: LibraryGame[] }>(`${this.backendUrl}/library`, {
-            params: new HttpParams().set('accessToken', accessToken),
+            headers: new HttpHeaders().set('Authorization', `Bearer ${accessToken}`),
           })
           .pipe(
             map(res => {
@@ -97,11 +97,9 @@ export class GogApiService {
               }));
             }),
             catchError(err => {
-              const detail = err?.error?.detail ?? err?.error?.error ?? '';
               this.logger.error(
                 TAG,
-                `library failed (username=${config.username}) — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
-                err,
+                `library failed (username=${config.username}) — HTTP ${err?.status ?? '?'}`,
               );
               throw err;
             }),
@@ -139,11 +137,7 @@ export class GogApiService {
           return r.accessToken;
         }),
         catchError(err => {
-          this.logger.error(
-            TAG,
-            `token refresh failed — HTTP ${err?.status ?? '?'}: ${err?.message ?? err}`,
-            err,
-          );
+          this.logger.error(TAG, `token refresh failed — HTTP ${err?.status ?? '?'}`);
           throw err;
         }),
       );

@@ -25,7 +25,7 @@ This file contains user stories for the Gamesync project. Every change must be r
 
 **Acceptance criteria:**
 - [ ] User can enter a Steam API key and Steam ID
-- [ ] Connection is saved and persisted across sessions
+- [ ] Connection is retained for the current browser tab session
 - [ ] Games from Steam are fetched and displayed in the library
 
 ---
@@ -447,3 +447,109 @@ This file contains user stories for the Gamesync project. Every change must be r
 - [ ] In the library header, a **Retry unmatched (N)** button appears when N ≥ 1 games are permanently unmatched
 - [ ] Clicking it clears the no-match cache for all unmatched games and re-runs searches concurrently
 - [ ] The Retry button is disabled / shows a spinner while the search is in progress
+
+---
+
+### US-034: Restrict CSV proxy destinations
+**As a** user,
+**I want** CSV imports to fetch only bounded HTTPS Azure Blob resources,
+**So that** the import proxy cannot access private services or exhaust server memory.
+
+**Acceptance criteria:**
+- [ ] CSV imports accept only HTTPS URLs hosted by Azure Blob Storage
+- [ ] Redirects cannot bypass destination validation
+- [ ] CSV downloads have a fixed maximum response size
+- [ ] Invalid destinations return a 400 response without making an upstream request
+
+---
+
+### US-035: Keep connection credentials out of request URLs and logs
+**As a** user,
+**I want** store credentials sent in request headers or bodies and omitted from diagnostic errors,
+**So that** API keys, OAuth tokens, and SAS signatures are not exposed in URLs or console logs.
+
+**Acceptance criteria:**
+- [ ] Steam API keys and GOG access tokens are sent in authorization headers
+- [ ] Azure SAS URLs are sent in request bodies
+- [ ] Proxy responses containing credentials are marked `Cache-Control: no-store`
+- [ ] Logged HTTP errors omit request URLs, headers, and credential-bearing detail objects
+
+---
+
+### US-036: Limit browser persistence of connection secrets
+**As a** user,
+**I want** connection credentials retained only for the current browser tab session,
+**So that** long-lived API keys and tokens are not stored permanently in localStorage.
+
+**Acceptance criteria:**
+- [ ] Store connection credentials are persisted in sessionStorage instead of localStorage
+- [ ] Existing legacy localStorage connection credentials are removed during startup
+- [ ] Removing a connection removes its credentials from session storage
+
+---
+
+### US-037: React to game detail route changes
+**As a** user,
+**I want** the game detail view to update when navigation changes the game ID,
+**So that** recommendation navigation never leaves the previous game displayed.
+
+**Acceptance criteria:**
+- [ ] The active game ID reacts to `ActivatedRoute.paramMap` changes
+- [ ] Navigating between two game detail URLs updates the rendered game without recreating the component
+- [ ] Metadata loading runs for the newly selected Steam game when needed
+
+---
+
+### US-038: Keep removed connections removed during synchronization
+**As a** user,
+**I want** deleting a connection to cancel or ignore its in-progress synchronization result,
+**So that** games from a deleted account cannot reappear later.
+
+**Acceptance criteria:**
+- [ ] Sync results are merged only for connections that still exist when the request completes
+- [ ] Games and background metadata work from a connection removed mid-sync are discarded
+
+---
+
+### US-039: Keep Steam owned-game caches connection-safe
+**As a** user,
+**I want** cached Steam games associated with the currently active connection,
+**So that** removing and re-adding an account cannot restore games linked to a deleted connection ID.
+
+**Acceptance criteria:**
+- [ ] Cached Steam owned-game data is independent of connection IDs
+- [ ] Every cache read maps games to the requesting connection ID
+
+---
+
+### US-040: Retry Steam searches after transient failures
+**As a** user,
+**I want** failed Steam searches retried on a later sync,
+**So that** a temporary network or server error is not recorded permanently as no match.
+
+**Acceptance criteria:**
+- [ ] Successful zero-result searches remain permanently cached as no match
+- [ ] Failed searches do not create a no-match cache entry
+- [ ] A later sync retries a previously failed search
+
+---
+
+### US-041: Preserve metadata when Steam reviews fail
+**As a** user,
+**I want** available Steam artwork, release year, and tags displayed even when reviews are unavailable,
+**So that** one optional upstream failure does not discard all game metadata.
+
+**Acceptance criteria:**
+- [ ] A successful app-details response produces metadata when the reviews request fails
+- [ ] Partial metadata omits the community score and is cached normally
+
+---
+
+### US-042: Type-check backend modules for deployment
+**As a** developer,
+**I want** backend and API modules to satisfy strict NodeNext resolution,
+**So that** production deployment does not fail on ESM import paths.
+
+**Acceptance criteria:**
+- [ ] Relative backend imports use explicit `.js` extensions
+- [ ] The backend TypeScript project passes strict type-checking

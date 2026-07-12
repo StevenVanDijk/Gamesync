@@ -32,13 +32,10 @@ export class LoggingService {
     this.push('warn', tag, message);
   }
 
-  error(tag: string, message: string, detail?: unknown): void {
-    if (detail !== undefined) {
-      console.error(`[${tag}] ${message}`, detail);
-    } else {
-      console.error(`[${tag}] ${message}`);
-    }
-    this.push('error', tag, message);
+  error(tag: string, message: string, _detail?: unknown): void {
+    const safeMessage = message.replace(/https?:\/\/[^\s]+/gi, '[redacted-url]');
+    console.error(`[${tag}] ${safeMessage}`);
+    this.push('error', tag, safeMessage);
     this._unseenErrors.update(n => n + 1);
   }
 

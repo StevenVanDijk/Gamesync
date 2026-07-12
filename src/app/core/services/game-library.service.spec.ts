@@ -56,6 +56,7 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -92,6 +93,7 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
       .forEach(r => r.flush({ games: [] }));
     httpMock.verify();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it('should start with an empty game list (US-001)', () => {
@@ -366,5 +368,33 @@ describe('GameLibraryService (US-001, US-004, US-008)', () => {
 
     expect(librarySvc.gameCount()).toBe(1);
     expect(librarySvc.games()[0].hoursPlayed).toBe(2);
+  });
+
+  it('should ignore a sync result after its connection is removed (US-038)', async () => {
+    const connection = connectionSvc.add('steam', 'Steam', steamConfig);
+    const resultPromise = firstValueFrom(librarySvc.syncAll());
+    const request = httpMock.expectOne(r => r.url.includes('owned-games'));
+
+    connectionSvc.remove(connection.id);
+    librarySvc.removeByConnection(connection.id);
+    request.flush(ownedGamesFlush);
+
+    expect(await resultPromise).toEqual([]);
+    expect(librarySvc.games()).toEqual([]);
+    httpMock.expectNone(r => r.url.includes('app-details'));
+  });
+
+  it('should retry a Steam search after a transient failure (US-040)', async () => {
+    connectionSvc.add('gog', 'GOG', gogConfig);
+
+    const firstSync = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes('/library')).flush(gogLibraryFlush);
+    await firstSync;
+    httpMock.expectOne(r => r.url.includes('/search')).error(new ProgressEvent('network'));
+
+    const secondSync = firstValueFrom(librarySvc.syncAll());
+    httpMock.expectOne(r => r.url.includes('/library')).flush(gogLibraryFlush);
+    await secondSync;
+    httpMock.expectOne(r => r.url.includes('/search')).flush({ candidates: [] });
   });
 });

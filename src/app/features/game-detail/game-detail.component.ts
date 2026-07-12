@@ -1,6 +1,7 @@
-import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Component, computed, DestroyRef, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
+import { finalize, map } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
@@ -13,7 +14,7 @@ import { GameLibraryService } from '../../core/services/game-library.service';
 import { SteamApiService } from '../../core/services/steam-api.service';
 import { StoreConnectionService } from '../../core/services/store-connection.service';
 import { RecommendationService } from '../../core/services/recommendation.service';
-import { SteamCandidate } from '../../core/models/game.model';
+import { Game, SteamCandidate } from '../../core/models/game.model';
 
 @Component({
   selector: 'app-game-detail',
@@ -284,7 +285,7 @@ import { SteamCandidate } from '../../core/models/game.model';
     }
   `],
 })
-export class GameDetailComponent implements OnInit {
+export class GameDetailComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly librarySvc = inject(GameLibraryService);
@@ -293,17 +294,35 @@ export class GameDetailComponent implements OnInit {
   private readonly recommendationSvc = inject(RecommendationService);
   private readonly destroyRef = inject(DestroyRef);
 
-  /** Route param — initialised from snapshot so computed() can use it as a stable dependency. */
-  private readonly id = this.route.snapshot.paramMap.get('id') ?? '';
+  private readonly id = toSignal(
+    this.route.paramMap.pipe(map(params => params.get('id') ?? '')),
+    { initialValue: this.route.snapshot.paramMap.get('id') ?? '' },
+  );
+  private readonly metadataRequestIds = new Set<string>();
 
-  /** Reactive: auto-updates when the library signal changes (background fetches, candidate updates). */
-  protected readonly game = computed(() => this.librarySvc.games().find(g => g.id === this.id));
+  /** Reactive: auto-updates when the route or library signal changes. */
+  protected readonly game = computed(() => this.librarySvc.games().find(g => g.id === this.id()));
   protected readonly loading = signal(false);
   protected readonly metadataLoading = signal(false);
 
   protected readonly isSteam = computed(() =>
     this.connectionSvc.getById(this.game()?.storeId ?? '')?.type === 'steam',
   );
+
+  private readonly metadataEffect = effect(() => {
+    const game = this.game();
+    this.metadataLoading.set(game ? this.metadataRequestIds.has(game.id) : false);
+    if (
+      !game ||
+      game.metadata ||
+      !this.isSteam() ||
+      this.librarySvc.fetchingMetadataIds().has(game.id) ||
+      this.metadataRequestIds.has(game.id)
+    ) {
+      return;
+    }
+    this.fetchMetadataFor(game);
+  });
 
   protected readonly hasCandidates = computed(
     () => (this.game()?.steamCandidates?.length ?? 0) > 0,
@@ -319,7 +338,7 @@ export class GameDetailComponent implements OnInit {
 
   /** True while this game's Steam search (or metadata fetch) is running. */
   protected readonly searchRetrying = computed(() =>
-    this.librarySvc.fetchingMetadataIds().has(this.id),
+    this.librarySvc.fetchingMetadataIds().has(this.id()),
   );
 
   /** Tags that appear in the user's anchor taste profile, for highlighting. */
@@ -337,24 +356,32 @@ export class GameDetailComponent implements OnInit {
     return null;
   });
 
-  ngOnInit(): void {
-    // Auto-fetch Steam metadata if missing (non-Steam is handled by background search)
-    if (this.game() && !this.game()!.metadata && this.isSteam()) {
-      this.fetchMetadata();
+  fetchMetadata(): void {
+    const game = this.game();
+    if (
+      !game ||
+      !this.isSteam() ||
+      this.librarySvc.fetchingMetadataIds().has(game.id) ||
+      this.metadataRequestIds.has(game.id)
+    ) {
+      return;
     }
+    this.fetchMetadataFor(game);
   }
 
-  fetchMetadata(): void {
-    const g = this.game();
-    if (!g || !this.isSteam()) return;
+  private fetchMetadataFor(game: Game): void {
+    this.metadataRequestIds.add(game.id);
+    if (this.id() === game.id) this.metadataLoading.set(true);
 
-    this.metadataLoading.set(true);
-    this.steamApi.getAppMetadata(g.appId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: metadata => {
-        this.librarySvc.updateGameMetadata(g.id, metadata);
-        this.metadataLoading.set(false);
-      },
-      error: () => this.metadataLoading.set(false),
+    this.steamApi.getAppMetadata(game.appId).pipe(
+      finalize(() => {
+        this.metadataRequestIds.delete(game.id);
+        if (this.id() === game.id) this.metadataLoading.set(false);
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
+      next: metadata => this.librarySvc.updateGameMetadata(game.id, metadata),
+      error: () => undefined,
     });
   }
 
@@ -392,7 +419,7 @@ export class GameDetailComponent implements OnInit {
 
   goToRecommendation(): void {
     // Ensure the currently displayed game is not recommended back to itself
-    this.recommendationSvc.markVisited(this.id);
+    this.recommendationSvc.markVisited(this.id());
     const game = this.recommendationSvc.next();
     if (game) {
       this.router.navigate(['/library', game.id]);
