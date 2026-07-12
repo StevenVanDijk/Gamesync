@@ -29,8 +29,8 @@ function forwardError(res: Response, err: unknown): void {
 }
 
 steamRouter.get('/owned-games', async (req: Request, res: Response) => {
-  const authorization = req.get('Authorization');
-  const key = authorization?.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    const authorization = req.get('Authorization');
+    const key = authorization?.toLowerCase().startsWith('bearer ') ? authorization.slice(7).trim() : '';
   const steamid = req.query.steamid as string | undefined;
   if (!key || !steamid) {
     res.status(400).json({ error: 'authorization header and steamid query param are required' });
