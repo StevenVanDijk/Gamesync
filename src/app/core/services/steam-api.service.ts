@@ -1,5 +1,5 @@
 import { inject, Injectable, InjectionToken } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable, of, map, switchMap, catchError, retry, timer, OperatorFunction, throwError } from 'rxjs';
 import { CacheService, PERMANENT_CACHE } from './cache.service';
 import { RateLimiterService } from './rate-limiter.service';
@@ -21,6 +21,12 @@ interface SteamOwnedGamesResponse {
     games?: SteamOwnedGame[];
     game_count?: number;
   };
+}
+
+interface CachedOwnedGame {
+  appId: string;
+  name: string;
+  hoursPlayed: number;
 }
 
 interface SteamAppDetailsData {
@@ -85,41 +91,33 @@ export class SteamApiService {
     storeId: string,
   ): Observable<Game[]> {
     const cacheKey = `steam_owned_${config.steamId}`;
-    const cached = this.cache.get<Game[]>(cacheKey);
+    const cached = this.cache.get<CachedOwnedGame[]>(cacheKey);
     if (cached) {
       this.logger.info(TAG, `owned-games cache hit (steamId=${config.steamId})`);
-      return of(cached);
+      return of(this.mapOwnedGames(cached, storeId));
     }
 
     const url = `${this.backendUrl}/owned-games`;
     this.logger.info(TAG, `GET ${url} (steamId=${config.steamId})`);
 
-    const params = new HttpParams()
-      .set('key', config.apiKey)
-      .set('steamid', config.steamId);
+    const params = new HttpParams().set('steamid', config.steamId);
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${config.apiKey}`);
 
     return this.rateLimiter.enqueue(() =>
-      this.http.get<SteamOwnedGamesResponse>(url, { params }).pipe(
+      this.http.get<SteamOwnedGamesResponse>(url, { params, headers }).pipe(
         map(res => {
           const rawGames = res.response.games ?? [];
           this.logger.info(TAG, `owned-games: ${rawGames.length} game(s) received`);
-          const games: Game[] = rawGames.map(g => ({
-            id: `${storeId}_${g.appid}`,
+          const games: CachedOwnedGame[] = rawGames.map(g => ({
             appId: String(g.appid),
-            storeId,
             name: g.name ?? `App ${g.appid}`,
             hoursPlayed: Math.round((g.playtime_forever / 60) * 10) / 10,
           }));
           this.cache.set(cacheKey, games, OWNED_GAMES_TTL);
-          return games;
+          return this.mapOwnedGames(games, storeId);
         }),
         catchError(err => {
-          const detail = err?.error?.detail ?? err?.error?.error ?? '';
-          this.logger.error(
-            TAG,
-            `owned-games failed — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
-            err,
-          );
+          this.logger.error(TAG, `owned-games failed — HTTP ${err?.status ?? '?'}`);
           throw err;
         }),
       ),
@@ -181,6 +179,12 @@ export class SteamApiService {
             ...(details?.genres?.map(g => g.description) ?? []),
             ...(details?.categories?.map(c => c.description) ?? []),
           ];
+          const partialMetadata: GameMetadata = {
+            imageUrl: details?.header_image,
+            yearPublished,
+            tags: tags.length ? tags : undefined,
+            fetchedAt: Date.now(),
+          };
 
           return this.http
             .get<SteamReviewsResponse>(reviewsUrl, {
@@ -204,32 +208,26 @@ export class SteamApiService {
                 );
 
                 const metadata: GameMetadata = {
-                  imageUrl: details?.header_image,
-                  yearPublished,
-                  tags: tags.length ? tags : undefined,
-                  communityScore,
-                  fetchedAt: Date.now(),
+                  ...partialMetadata,
+                  ...(communityScore !== undefined && { communityScore }),
                 };
                 this.cache.set(cacheKey, metadata, METADATA_TTL);
                 return metadata;
               }),
               catchError(err => {
-                const detail = err?.error?.detail ?? err?.error?.error ?? '';
                 this.logger.error(
                   TAG,
-                  `reviews failed for appId=${appId} — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
-                  err,
+                  `reviews failed for appId=${appId} — HTTP ${err?.status ?? '?'}`,
                 );
-                throw err;
+                this.cache.set(cacheKey, partialMetadata, METADATA_TTL);
+                return of(partialMetadata);
               }),
             );
         }),
         catchError(err => {
-          const detail = err?.error?.detail ?? err?.error?.error ?? '';
           this.logger.error(
             TAG,
-            `app-details failed for appId=${appId} — HTTP ${err?.status ?? '?'}${detail ? ': ' + detail : ''}`,
-            err,
+            `app-details failed for appId=${appId} — HTTP ${err?.status ?? '?'}`,
           );
           throw err;
         }),
@@ -284,6 +282,16 @@ export class SteamApiService {
 
   clearCandidates(gameId: string): void {
     this.cache.delete(`steam_candidates_${gameId}`);
+  }
+
+  private mapOwnedGames(games: CachedOwnedGame[], storeId: string): Game[] {
+    return games.map(game => ({
+      id: `${storeId}_${game.appId}`,
+      appId: game.appId,
+      storeId,
+      name: game.name,
+      hoursPlayed: game.hoursPlayed,
+    }));
   }
 
   /**

@@ -13,31 +13,30 @@ function forwardError(res: Response, err: unknown): void {
   if (axios.isAxiosError(err)) {
     if (err.response) {
       const status = err.response.status;
-      const detail = typeof err.response.data === 'string'
-        ? err.response.data.slice(0, 200)
-        : JSON.stringify(err.response.data ?? {});
-      console.error(`[Steam] upstream HTTP ${status}:`, detail);
-      res.status(status).json({ error: err.response.statusText, detail });
+      console.error(`[Steam] upstream HTTP ${status}`);
+      res.status(status).json({ error: err.response.statusText });
     } else if (err.code === 'ECONNABORTED' || err.code === 'ERR_CANCELED') {
-      console.error('[Steam] upstream request timed out:', err.message);
+      console.error('[Steam] upstream request timed out');
       res.status(504).json({ error: 'Upstream request timed out' });
     } else {
-      console.error('[Steam] axios error (no response):', err.code, err.message);
-      res.status(502).json({ error: 'Upstream request failed', detail: err.message });
+      console.error('[Steam] upstream request failed', err.code);
+      res.status(502).json({ error: 'Upstream request failed' });
     }
   } else {
-    console.error('[Steam] unexpected error:', err);
-    res.status(502).json({ error: 'Upstream request failed', detail: String(err) });
+    console.error('[Steam] unexpected upstream error');
+    res.status(502).json({ error: 'Upstream request failed' });
   }
 }
 
-/** GET /api/steam/owned-games?key=<key>&steamid=<id> */
 steamRouter.get('/owned-games', async (req: Request, res: Response) => {
-  const { key, steamid } = req.query;
+    const authorization = req.get('Authorization');
+    const key = authorization?.toLowerCase().startsWith('bearer ') ? authorization.slice(7).trim() : '';
+  const steamid = req.query.steamid as string | undefined;
   if (!key || !steamid) {
-    res.status(400).json({ error: 'key and steamid query params are required' });
+    res.status(400).json({ error: 'authorization header and steamid query param are required' });
     return;
   }
+  res.set('Cache-Control', 'no-store');
   try {
     const { data } = await axios.get(`${STEAM_API_BASE}/IPlayerService/GetOwnedGames/v0001/`, {
       params: { key, steamid, include_appinfo: 1, include_played_free_games: 1, format: 'json' },

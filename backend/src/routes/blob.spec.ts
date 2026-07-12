@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
-import app from '../app';
+import app from '../app.js';
 
 vi.mock('axios', () => {
   const axiosGet = vi.fn();
@@ -27,7 +27,7 @@ const mockGet = vi.mocked(axios.get);
 
 beforeEach(() => vi.clearAllMocks());
 
-const ENCODED_URL = encodeURIComponent('https://mystorage.blob.core.windows.net/c/games.csv?sv=test');
+const SAS_URL = 'https://mystorage.blob.core.windows.net/c/games.csv?sv=test&sig=secret';
 
 const CSV_BASIC = `name,source,playtime
 Team Fortress 2,steam,120.5
@@ -35,17 +35,35 @@ The Witcher 3,gog,34
 Fortnite,epic,0
 `;
 
-describe('GET /api/blob/library (US-028)', () => {
-  it('should return 400 when url param is missing', async () => {
-    const res = await request(app).get('/api/blob/library');
+describe('POST /api/blob/library (US-028, US-034, US-035)', () => {
+  it('should return 400 when url is missing (US-034)', async () => {
+    const res = await request(app).post('/api/blob/library').send({});
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/url/i);
+    expect(mockGet).not.toHaveBeenCalled();
   });
 
-  it('should fetch the blob URL and return parsed games', async () => {
+    it('should return 400 for invalid Azure Blob URLs (US-034)', async () => {
+      const invalidUrls = [
+        'http://mystorage.blob.core.windows.net/c/games.csv?sv=test&sig=secret', // HTTP
+        'https://localhost/games.csv', // Invalid hostname
+        'https://mystorage.blob.core.windows.net.evil.example/games.csv', // Invalid hostname
+        'https://user:password@mystorage.blob.core.windows.net/games.csv', // Userinfo
+        'https://mystorage.blob.core.windows.net:8443/games.csv', // Non-standard port
+        'https://mystorage.blob.core.windows.net/games.csv?query=string', // Extra query string params not part of SAS
+      ];
+      for (const url of invalidUrls) {
+        const res = await request(app).post('/api/blob/library').send({ url });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/valid HTTPS Azure Blob URL/i);
+        expect(mockGet).not.toHaveBeenCalled();
+      }
+    });
+
+  it('should fetch a bounded non-redirecting blob request from the body (US-034, US-035)', async () => {
     mockGet.mockResolvedValueOnce({ data: CSV_BASIC });
 
-    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    const res = await request(app).post('/api/blob/library').send({ url: SAS_URL });
 
     expect(res.status).toBe(200);
     expect(res.body.games).toHaveLength(3);
@@ -55,16 +73,21 @@ describe('GET /api/blob/library (US-028)', () => {
     expect(res.body.games[2]).toMatchObject({ name: 'Fortnite', source: 'epic', hoursPlayed: 0 });
 
     expect(mockGet).toHaveBeenCalledWith(
-      decodeURIComponent(ENCODED_URL),
-      expect.objectContaining({ responseType: 'text' }),
+      SAS_URL,
+      expect.objectContaining({
+        responseType: 'text',
+        maxRedirects: 0,
+        maxContentLength: 5 * 1024 * 1024,
+      }),
     );
+    expect(res.headers['cache-control']).toBe('no-store');
   });
 
   it('should handle semicolon-delimited CSV', async () => {
     const csv = `name;source;playtime\nDiablo IV;battlenet;22\n`;
     mockGet.mockResolvedValueOnce({ data: csv });
 
-    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    const res = await request(app).post('/api/blob/library').send({ url: SAS_URL });
     expect(res.status).toBe(200);
     expect(res.body.games[0]).toMatchObject({ name: 'Diablo IV', source: 'battlenet', hoursPlayed: 22 });
   });
@@ -73,7 +96,7 @@ describe('GET /api/blob/library (US-028)', () => {
     const csv = `name,source,playtime\n"Assassin's Creed: Origins",ubisoft,15\n`;
     mockGet.mockResolvedValueOnce({ data: csv });
 
-    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    const res = await request(app).post('/api/blob/library').send({ url: SAS_URL });
     expect(res.status).toBe(200);
     expect(res.body.games[0].name).toBe("Assassin's Creed: Origins");
   });
@@ -82,7 +105,7 @@ describe('GET /api/blob/library (US-028)', () => {
     const csv = `name,source,playtime\nValid Game,steam,5\n,gog,10\n`;
     mockGet.mockResolvedValueOnce({ data: csv });
 
-    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    const res = await request(app).post('/api/blob/library').send({ url: SAS_URL });
     expect(res.status).toBe(200);
     expect(res.body.games).toHaveLength(1);
   });
@@ -91,13 +114,13 @@ describe('GET /api/blob/library (US-028)', () => {
     const csv = `name,source,playtime\nBad Data,steam,-5\n`;
     mockGet.mockResolvedValueOnce({ data: csv });
 
-    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    const res = await request(app).post('/api/blob/library').send({ url: SAS_URL });
     expect(res.body.games[0].hoursPlayed).toBe(0);
   });
 
   it('should return 502 when the blob URL is unreachable', async () => {
     mockGet.mockRejectedValueOnce(new Error('network error'));
-    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    const res = await request(app).post('/api/blob/library').send({ url: SAS_URL });
     expect(res.status).toBe(502);
   });
 
@@ -107,7 +130,7 @@ describe('GET /api/blob/library (US-028)', () => {
     (err as any).response = { status: 403, statusText: 'Forbidden', data: 'Access denied' };
     mockGet.mockRejectedValueOnce(err);
 
-    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    const res = await request(app).post('/api/blob/library').send({ url: SAS_URL });
     expect(res.status).toBe(403);
   });
 
@@ -121,7 +144,7 @@ describe('GET /api/blob/library (US-028)', () => {
     ].join('\n');
     mockGet.mockResolvedValueOnce({ data: csv });
 
-    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    const res = await request(app).post('/api/blob/library').send({ url: SAS_URL });
     expect(res.status).toBe(200);
     expect(res.body.games).toHaveLength(3);
     // 432000 s ÷ 3600 = 120 h
@@ -141,7 +164,7 @@ describe('GET /api/blob/library (US-028)', () => {
     ].join('\n');
     mockGet.mockResolvedValueOnce({ data: csv });
 
-    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    const res = await request(app).post('/api/blob/library').send({ url: SAS_URL });
     expect(res.status).toBe(200);
     expect(res.body.games[0]).toMatchObject({ name: 'Team Fortress 2', isInstalled: true });
     expect(res.body.games[1]).toMatchObject({ name: 'Fortnite', isInstalled: false });
@@ -150,7 +173,7 @@ describe('GET /api/blob/library (US-028)', () => {
   it('should omit isInstalled when IsInstalled column is absent (US-029)', async () => {
     mockGet.mockResolvedValueOnce({ data: CSV_BASIC });
 
-    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    const res = await request(app).post('/api/blob/library').send({ url: SAS_URL });
     expect(res.status).toBe(200);
     expect(res.body.games[0]).not.toHaveProperty('isInstalled');
   });
@@ -163,7 +186,7 @@ describe('GET /api/blob/library (US-028)', () => {
     ].join('\n');
     mockGet.mockResolvedValueOnce({ data: csv });
 
-    const res = await request(app).get('/api/blob/library').query({ url: ENCODED_URL });
+    const res = await request(app).post('/api/blob/library').send({ url: SAS_URL });
     expect(res.status).toBe(200);
     // Leading space inside quotes is trimmed by the parser
     expect(res.body.games[0].name).toBe('Wanba Warriors');

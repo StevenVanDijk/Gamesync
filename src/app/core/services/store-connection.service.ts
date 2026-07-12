@@ -54,17 +54,41 @@ export class StoreConnectionService {
   }
 
   private load(): StoreConnection[] {
+    const legacy = this.read(localStorage);
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as StoreConnection[]) : [];
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+
+    const current = this.read(sessionStorage);
+    if (current) return current;
+    if (legacy) {
+      this.persist(legacy);
+      return legacy;
+    }
+    return [];
+  }
+
+  private read(storage: Storage): StoreConnection[] | null {
+    try {
+      const raw = storage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        storage.removeItem(STORAGE_KEY);
+        return null;
+      }
+      return parsed as StoreConnection[];
     } catch {
-      return [];
+      try {
+        storage.removeItem(STORAGE_KEY);
+      } catch {}
+      return null;
     }
   }
 
   private persist(connections: StoreConnection[]): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(connections));
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(connections));
     } catch {
       // storage quota exceeded – skip
     }

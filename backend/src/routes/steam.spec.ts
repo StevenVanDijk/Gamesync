@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
-import app from '../app';
+import app from '../app.js';
 
 // ── Mock axios ────────────────────────────────────────────────────────────────
 vi.mock('axios', () => {
@@ -34,14 +34,15 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('GET /api/steam/owned-games (US-011)', () => {
-  it('should return 400 when key or steamid is missing', async () => {
+describe('GET /api/steam/owned-games (US-011, US-035)', () => {
+  it('should return 400 when authorization or steamid is missing (US-035)', async () => {
     const res = await request(app).get('/api/steam/owned-games');
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/key and steamid/i);
+    expect(res.body.error).toMatch(/authorization.*steamid/i);
+    expect(mockAxiosGet).not.toHaveBeenCalled();
   });
 
-  it('should proxy request to Steam Web API and return data', async () => {
+  it('should accept the API key in a header and mark the response no-store (US-035)', async () => {
     const steamResponse = {
       response: { game_count: 1, games: [{ appid: 440, name: 'TF2', playtime_forever: 120 }] },
     };
@@ -49,10 +50,12 @@ describe('GET /api/steam/owned-games (US-011)', () => {
 
     const res = await request(app)
       .get('/api/steam/owned-games')
-      .query({ key: 'TESTKEY', steamid: '76561198000000001' });
+      .set('Authorization', 'Bearer TESTKEY')
+      .query({ steamid: '76561198000000001' });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual(steamResponse);
+    expect(res.headers['cache-control']).toBe('no-store');
     expect(mockAxiosGet).toHaveBeenCalledWith(
       expect.stringContaining('IPlayerService/GetOwnedGames'),
       expect.objectContaining({ params: expect.objectContaining({ key: 'TESTKEY' }) }),
@@ -67,7 +70,8 @@ describe('GET /api/steam/owned-games (US-011)', () => {
 
     const res = await request(app)
       .get('/api/steam/owned-games')
-      .query({ key: 'BAD', steamid: '123' });
+      .set('Authorization', 'Bearer BAD')
+      .query({ steamid: '123' });
 
     expect(res.status).toBe(403);
   });

@@ -8,7 +8,7 @@ import { SteamApiService, STEAM_BACKEND_URL } from './steam-api.service';
 import { CacheService } from './cache.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { SteamConnectionConfig } from '../models/store-connection.model';
-import { Game } from '../models/game.model';
+import { LoggingService } from './logging.service';
 
 /** Execute the factory immediately (bypass queue/timers). */
 function makeImmediateRateLimiter(): Partial<RateLimiterService> {
@@ -21,10 +21,11 @@ function makeImmediateRateLimiter(): Partial<RateLimiterService> {
 
 const TEST_BACKEND = 'http://test-backend/api/steam';
 
-describe('SteamApiService (US-002, US-005, US-006, US-011)', () => {
+describe('SteamApiService (US-002, US-005, US-006, US-011, US-035, US-039, US-041)', () => {
   let service: SteamApiService;
   let httpMock: HttpTestingController;
   let cache: CacheService;
+  let logger: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
   const config: SteamConnectionConfig = {
     apiKey: 'TESTKEY123',
@@ -33,12 +34,14 @@ describe('SteamApiService (US-002, US-005, US-006, US-011)', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: RateLimiterService, useValue: makeImmediateRateLimiter() },
         { provide: STEAM_BACKEND_URL, useValue: TEST_BACKEND },
+        { provide: LoggingService, useValue: logger },
       ],
     });
     service = TestBed.inject(SteamApiService);
@@ -73,24 +76,43 @@ describe('SteamApiService (US-002, US-005, US-006, US-011)', () => {
     expect(games[0].storeId).toBe('conn1');
   });
 
-  it('should route owned-games request through the backend proxy (US-011)', async () => {
+  it('should send the Steam API key in authorization instead of the URL (US-035)', async () => {
     const resultPromise = firstValueFrom(service.getOwnedGames(config, 'conn1'));
     const req = httpMock.expectOne(r => r.url === `${TEST_BACKEND}/owned-games`);
-    expect(req.request.params.get('key')).toBe('TESTKEY123');
+    expect(req.request.params.has('key')).toBe(false);
     expect(req.request.params.get('steamid')).toBe('76561198000000001');
+    expect(req.request.headers.get('Authorization')).toBe('Bearer TESTKEY123');
+    expect(req.request.urlWithParams).not.toContain('TESTKEY123');
     req.flush({ response: { games: [] } });
     await resultPromise;
   });
 
-  it('should return cached owned games without HTTP (US-006)', async () => {
-    const cached: Game[] = [
-      { id: 'conn1_440', appId: '440', storeId: 'conn1', name: 'TF2', hoursPlayed: 2 },
-    ];
-    cache.set('steam_owned_76561198000000001', cached, 60_000);
+  it('should omit credential-bearing HTTP error details from logs (US-035)', async () => {
+    const resultPromise = firstValueFrom(service.getOwnedGames(config, 'conn1')).catch(() => undefined);
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/owned-games`).flush(
+      { error: 'Forbidden', detail: 'TESTKEY123' },
+      { status: 403, statusText: 'Forbidden' },
+    );
+    await resultPromise;
+    expect(logger.error).toHaveBeenCalledWith('Steam', 'owned-games failed — HTTP 403');
+  });
 
-    const result = await firstValueFrom(service.getOwnedGames(config, 'conn1'));
+  it('should cache connection-independent games and remap every read (US-039)', async () => {
+    const firstPromise = firstValueFrom(service.getOwnedGames(config, 'removed-connection'));
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/owned-games`).flush({
+      response: { games: [{ appid: 440, name: 'TF2', playtime_forever: 120 }] },
+    });
+    const first = await firstPromise;
+    expect(first[0]).toMatchObject({ id: 'removed-connection_440', storeId: 'removed-connection' });
+
+    const cached = cache.get<Array<Record<string, unknown>>>('steam_owned_76561198000000001');
+    expect(cached?.[0]).toEqual({ appId: '440', name: 'TF2', hoursPlayed: 2 });
+    expect(cached?.[0]).not.toHaveProperty('id');
+    expect(cached?.[0]).not.toHaveProperty('storeId');
+
+    const remapped = await firstValueFrom(service.getOwnedGames(config, 'current-connection'));
     httpMock.expectNone(() => true);
-    expect(result).toHaveLength(1);
+    expect(remapped[0]).toMatchObject({ id: 'current-connection_440', storeId: 'current-connection' });
   });
 
   // ── US-005 : metadata ────────────────────────────────────────────────────
@@ -152,6 +174,36 @@ describe('SteamApiService (US-002, US-005, US-006, US-011)', () => {
 
     const meta = await resultPromise;
     expect(meta.communityScore).toBeUndefined();
+  });
+
+  it('should return and permanently cache partial metadata when reviews fail (US-041)', async () => {
+    const resultPromise = firstValueFrom(service.getAppMetadata('41'));
+
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/app-details`).flush({
+      '41': {
+        success: true,
+        data: {
+          name: 'Partial Game',
+          header_image: 'partial.jpg',
+          genres: [{ id: '1', description: 'RPG' }],
+          release_date: { coming_soon: false, date: '2021' },
+        },
+      },
+    });
+    httpMock.expectOne(r => r.url === `${TEST_BACKEND}/reviews/41`).flush(
+      { error: 'Unavailable', detail: 'credential-bearing detail' },
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+
+    const metadata = await resultPromise;
+    expect(metadata).toMatchObject({ imageUrl: 'partial.jpg', yearPublished: 2021, tags: ['RPG'] });
+    expect(metadata).not.toHaveProperty('communityScore');
+    expect(JSON.parse(localStorage.getItem('gamesync_cache_steam_meta_41')!).expiresAt).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith('Steam', 'reviews failed for appId=41 — HTTP 503');
+
+    const cached = await firstValueFrom(service.getAppMetadata('41'));
+    httpMock.expectNone(() => true);
+    expect(cached).toEqual(metadata);
   });
 
   // ── US-017 : permanent cache ─────────────────────────────────────────────

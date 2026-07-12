@@ -35,6 +35,18 @@ describe('LoggingService (US-013)', () => {
     expect(service.unseenErrors()).toBe(1);
   });
 
+  it('should omit HTTP detail objects and request URLs from error logs (US-035)', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const detail = { url: 'https://example.com?token=secret', headers: { Authorization: 'secret' } };
+
+    service.error('HTTP', 'failed at https://example.com?token=secret', detail);
+
+    expect(consoleError).toHaveBeenCalledWith('[HTTP] failed at [redacted-url]');
+    expect(consoleError).not.toHaveBeenCalledWith(expect.anything(), detail);
+    expect(service.entries()[0].message).toBe('failed at [redacted-url]');
+    consoleError.mockRestore();
+  });
+
   it('should accumulate multiple unseen errors', () => {
     service.error('A', 'err 1');
     service.error('B', 'err 2');

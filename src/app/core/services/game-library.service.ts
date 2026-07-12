@@ -92,16 +92,20 @@ export class GameLibraryService {
     return forkJoin(fetches).pipe(
       tap({
         next: results => {
+          const activeIds = new Set(this.connectionSvc.connections().map(c => c.id));
+          const activeConnectionCount = connections.filter(c => activeIds.has(c.id)).length;
           const successfulIds = new Set(
             connections
-              .filter((_, i) => results[i] !== null)
+              .filter((c, i) => activeIds.has(c.id) && results[i] !== null)
               .map(c => c.id),
           );
-          const freshGames = (results.filter(r => r !== null) as Game[][]).flat();
+          const freshGames = results.flatMap((result, i) =>
+            activeIds.has(connections[i].id) && result !== null ? result : [],
+          );
 
           this.logger.info(
             TAG,
-            `syncAll complete — ${freshGames.length} game(s) from ${successfulIds.size}/${connections.length} connection(s)`,
+            `syncAll complete — ${freshGames.length} game(s) from ${successfulIds.size}/${activeConnectionCount} connection(s)`,
           );
 
           // Merge: keep games from failed connections, update/add from successful ones.
@@ -112,7 +116,9 @@ export class GameLibraryService {
             return merged;
           });
 
-          const failedCount = connections.length - successfulIds.size;
+          const failedCount = connections.filter(
+            (connection, i) => activeIds.has(connection.id) && results[i] === null,
+          ).length;
           this._error.set(failedCount > 0
             ? `${failedCount} connection${failedCount > 1 ? 's' : ''} failed to sync`
             : null);
@@ -129,7 +135,10 @@ export class GameLibraryService {
         },
       }),
       switchMap(results => {
-        const allFresh = (results.filter(r => r !== null) as Game[][]).flat();
+        const activeIds = new Set(this.connectionSvc.connections().map(c => c.id));
+        const allFresh = results.flatMap((result, i) =>
+          activeIds.has(connections[i].id) && result !== null ? result : [],
+        );
         return of(allFresh);
       }),
     );
@@ -388,7 +397,6 @@ export class GameLibraryService {
                 }),
                 catchError(err => {
                   this.logger.warn(TAG, `Steam search failed for "${game.name}": ${err?.message ?? err}`);
-                  this.steamApi.setCachedCandidates(game.id, []);
                   return EMPTY;
                 }),
                 finalize(() => {

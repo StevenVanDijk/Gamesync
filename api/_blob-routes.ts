@@ -22,25 +22,46 @@ import axios from 'axios';
 export const blobRouter = Router();
 
 const UPSTREAM_TIMEOUT_MS = 15_000;
+const MAX_CSV_BYTES = 5 * 1024 * 1024;
+const AZURE_BLOB_HOST = /^[a-z0-9]{3,24}\.blob\.core\.windows\.net$/i;
 
 function forwardError(res: Response, err: unknown): void {
   if (axios.isAxiosError(err)) {
     if (err.response) {
       const status = err.response.status;
-      const detail =
-        typeof err.response.data === 'string'
-          ? err.response.data.slice(0, 200)
-          : JSON.stringify(err.response.data ?? {});
-      console.error(`[Blob] upstream HTTP ${status}:`, detail);
-      res.status(status).json({ error: err.response.statusText, detail });
+      console.error(`[Blob] upstream HTTP ${status}`);
+      res.status(status).json({ error: err.response.statusText });
     } else if (err.code === 'ECONNABORTED' || err.code === 'ERR_CANCELED') {
       res.status(504).json({ error: 'Upstream request timed out' });
     } else {
-      res.status(502).json({ error: 'Upstream request failed', detail: err.message });
+      // Any other axios error (e.g. 3xx, 4xx, 5xx) not specifically handled above
+      // is treated as a server error from the upstream.
+      const status = err.response?.status ?? 502; // Default to 502 if no response status
+      console.error(`[Blob] upstream HTTP error ${status}`);
+      res.status(status).json({ error: 'Upstream request failed' });
     }
   } else {
-    console.error('[Blob] unexpected error:', err);
-    res.status(502).json({ error: 'Upstream request failed', detail: String(err) });
+    console.error('[Blob] unexpected upstream error');
+    res.status(502).json({ error: 'Upstream request failed' });
+  }
+}
+
+function validBlobUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== 'https:' ||
+      !AZURE_BLOB_HOST.test(url.hostname) ||
+      (url.port !== '' && url.port !== '443') ||
+      url.username !== '' ||
+      url.password !== ''
+    ) {
+      return null;
+    }
+    return url.toString();
+  } catch {
+    return null;
   }
 }
 
@@ -106,30 +127,23 @@ function parseCsv(text: string): ParseResult {
   return { rows, playtimeInSeconds };
 }
 
-/**
- * GET /api/blob/library?url=<sas-url>
- * Fetches the CSV at the given URL and returns parsed games.
- */
-blobRouter.get('/library', async (req: Request, res: Response) => {
-  const url = req.query['url'] as string | undefined;
+blobRouter.post('/library', async (req: Request, res: Response) => {
+  const url = validBlobUrl((req.body as { url?: unknown } | undefined)?.url);
 
-  if (!url?.trim()) {
-    res.status(400).json({ error: 'url query param is required' });
+  if (!url) {
+    res.status(400).json({ error: 'A valid HTTPS Azure Blob URL is required' });
     return;
   }
 
-  let decodedUrl: string;
-  try {
-    decodedUrl = decodeURIComponent(url);
-  } catch {
-    res.status(400).json({ error: 'url is not valid URI-encoded' });
-    return;
-  }
+  res.set('Cache-Control', 'no-store');
 
   try {
-    const { data } = await axios.get<string>(decodedUrl, {
+    const { data } = await axios.get<string>(url, {
       responseType: 'text',
       timeout: UPSTREAM_TIMEOUT_MS,
+      maxRedirects: 0,
+      maxContentLength: MAX_CSV_BYTES,
+      maxBodyLength: MAX_CSV_BYTES,
     });
 
     const { rows, playtimeInSeconds } = parseCsv(data);

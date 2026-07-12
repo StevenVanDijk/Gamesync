@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
-import app from '../app';
+import app from '../app.js';
 
 // ── Mock axios ────────────────────────────────────────────────────────────────
 vi.mock('axios', () => {
@@ -52,14 +52,14 @@ describe('GET /api/gog/auth-url (US-023)', () => {
 
 // ── POST /api/gog/token ──────────────────────────────────────────────────────
 
-describe('POST /api/gog/token (US-023)', () => {
+describe('POST /api/gog/token (US-023, US-035)', () => {
   it('should return 400 when code is missing', async () => {
     const res = await request(app).post('/api/gog/token').send({});
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/code/i);
   });
 
-  it('should exchange authorization code for tokens and return user info', async () => {
+  it('should return credentials with no-store caching (US-035)', async () => {
     // First call: token endpoint
     mockGet.mockResolvedValueOnce({
       data: {
@@ -83,6 +83,7 @@ describe('POST /api/gog/token (US-023)', () => {
     expect(res.body.refreshToken).toBe('rt_gog_456');
     expect(typeof res.body.expiresAt).toBe('number');
     expect(res.body.expiresAt).toBeGreaterThan(Date.now());
+    expect(res.headers['cache-control']).toBe('no-store');
 
     expect(mockGet).toHaveBeenCalledWith(
       expect.stringContaining('auth.gog.com/token'),
@@ -112,14 +113,14 @@ describe('POST /api/gog/token (US-023)', () => {
 
 // ── POST /api/gog/refresh ────────────────────────────────────────────────────
 
-describe('POST /api/gog/refresh (US-023)', () => {
+describe('POST /api/gog/refresh (US-023, US-035)', () => {
   it('should return 400 when refreshToken is missing', async () => {
     const res = await request(app).post('/api/gog/refresh').send({});
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/refreshToken/i);
   });
 
-  it('should exchange refresh token for new tokens', async () => {
+  it('should return refreshed credentials with no-store caching (US-035)', async () => {
     mockGet.mockResolvedValueOnce({
       data: {
         access_token: 'new_at',
@@ -134,6 +135,7 @@ describe('POST /api/gog/refresh (US-023)', () => {
     expect(res.body.accessToken).toBe('new_at');
     expect(res.body.refreshToken).toBe('new_rt');
     expect(typeof res.body.expiresAt).toBe('number');
+    expect(res.headers['cache-control']).toBe('no-store');
 
     expect(mockGet).toHaveBeenCalledWith(
       expect.stringContaining('auth.gog.com/token'),
@@ -155,14 +157,15 @@ describe('POST /api/gog/refresh (US-023)', () => {
 
 // ── GET /api/gog/library ─────────────────────────────────────────────────────
 
-describe('GET /api/gog/library (US-023)', () => {
-  it('should return 400 when accessToken is missing', async () => {
+describe('GET /api/gog/library (US-023, US-035)', () => {
+  it('should return 400 when authorization is missing (US-035)', async () => {
     const res = await request(app).get('/api/gog/library');
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/accessToken/i);
+    expect(res.body.error).toMatch(/authorization/i);
+    expect(mockGet).not.toHaveBeenCalled();
   });
 
-  it('should fetch getFilteredProducts and return games with imageUrl', async () => {
+  it('should accept access tokens in authorization and return no-store (US-035)', async () => {
     mockGet.mockResolvedValueOnce({
       data: {
         totalPages: 1,
@@ -175,10 +178,11 @@ describe('GET /api/gog/library (US-023)', () => {
 
     const res = await request(app)
       .get('/api/gog/library')
-      .query({ accessToken: 'tok' });
+      .set('Authorization', 'Bearer tok');
 
     expect(res.status).toBe(200);
     expect(res.body.games).toHaveLength(2);
+    expect(res.headers['cache-control']).toBe('no-store');
 
     const witcher = res.body.games[0];
     expect(witcher.appId).toBe('1207659069');
@@ -194,6 +198,7 @@ describe('GET /api/gog/library (US-023)', () => {
       expect.stringContaining('embed.gog.com/account/getFilteredProducts'),
       expect.objectContaining({
         params: expect.objectContaining({ mediaType: 1, page: 1 }),
+        headers: { Authorization: 'Bearer tok' },
       }),
     );
   });
@@ -214,7 +219,7 @@ describe('GET /api/gog/library (US-023)', () => {
 
     const res = await request(app)
       .get('/api/gog/library')
-      .query({ accessToken: 'tok' });
+      .set('Authorization', 'Bearer tok');
 
     expect(res.status).toBe(200);
     expect(res.body.games).toHaveLength(2);
@@ -223,7 +228,7 @@ describe('GET /api/gog/library (US-023)', () => {
 
   it('should forward upstream errors', async () => {
     mockGet.mockRejectedValueOnce(new Error('network error'));
-    const res = await request(app).get('/api/gog/library').query({ accessToken: 'tok' });
+    const res = await request(app).get('/api/gog/library').set('Authorization', 'Bearer tok');
     expect(res.status).toBe(502);
   });
 });

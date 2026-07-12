@@ -1,8 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter, ActivatedRoute, Router } from '@angular/router';
+import { provideRouter, ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { signal } from '@angular/core';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { vi } from 'vitest';
 import { GameDetailComponent } from './game-detail.component';
 import { GameLibraryService } from '../../core/services/game-library.service';
@@ -50,6 +50,9 @@ describe('GameDetailComponent (US-004, US-005)', () => {
     recGame: Game | null = null,
   ) {
     const gamesSignal = signal<Game[]>(game ? [game] : []);
+    const routeParamMap = new BehaviorSubject(
+      convertToParamMap({ id: game?.id ?? 'missing' }),
+    );
 
     const steamApiSpy = {
       getAppMetadata: vi.fn().mockReturnValue(
@@ -113,7 +116,10 @@ describe('GameDetailComponent (US-004, US-005)', () => {
         { provide: SettingsService, useValue: settingsSvc },
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { paramMap: { get: () => game?.id ?? 'missing' } } },
+          useValue: {
+            paramMap: routeParamMap.asObservable(),
+            snapshot: { paramMap: convertToParamMap({ id: game?.id ?? 'missing' }) },
+          },
         },
       ],
     }).compileComponents();
@@ -123,12 +129,33 @@ describe('GameDetailComponent (US-004, US-005)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    return { steamApiSpy, librarySvc, connectionSvc, recommendationSvc };
+    return {
+      steamApiSpy,
+      librarySvc,
+      connectionSvc,
+      recommendationSvc,
+      gamesSignal,
+      routeParamMap,
+    };
   }
 
   it('should display the game name (US-004)', async () => {
     await createComponent(GAME_WITH_META);
     expect(fixture.nativeElement.textContent).toContain('Team Fortress 2');
+  });
+
+  it('should update the displayed game when the route ID changes (US-037)', async () => {
+    const { gamesSignal, routeParamMap, steamApiSpy } = await createComponent(GAME_WITH_META);
+    gamesSignal.set([GAME_WITH_META, GAME_NO_META]);
+
+    routeParamMap.next(convertToParamMap({ id: GAME_NO_META.id }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('CS2');
+    expect(fixture.nativeElement.textContent).not.toContain('Team Fortress 2');
+    expect(steamApiSpy.getAppMetadata).toHaveBeenCalledWith(GAME_NO_META.appId);
   });
 
   it('should display hours played (US-004)', async () => {
