@@ -153,8 +153,7 @@ gogRouter.post('/refresh', async (req: Request, res: Response) => {
 
 gogRouter.get('/library', async (req: Request, res: Response) => {
   const authorization = req.get('Authorization');
-    const authorization = req.get('Authorization');
-    const accessToken = authorization?.toLowerCase().startsWith('bearer ') ? authorization.slice(7).trim() : '';
+  const accessToken = authorization?.toLowerCase().startsWith('bearer ') ? authorization.slice(7).trim() : '';
 
   if (!accessToken) {
     res.status(400).json({ error: 'authorization header is required' });
